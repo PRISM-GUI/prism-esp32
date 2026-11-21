@@ -1,10 +1,15 @@
 #!/bin/sh
 # Runs the compiler given first without -pthread. Meson's threads dependency adds it, and the
 # ESP-IDF GCC rejects it (pthreads are an ESP-IDF component, linked by ESP-IDF).
+# Through ccache when it is installed: each firmware compiles PRISM in its own build directory,
+# and the cache lets the second and third reuse the first one's objects.
 compiler="$1"
 shift
 for arg in "$@"; do
     shift
     [ "$arg" = "-pthread" ] || set -- "$@" "$arg"
 done
+if command -v ccache >/dev/null 2>&1; then
+    exec ccache "$compiler" "$@"
+fi
 exec "$compiler" "$@"

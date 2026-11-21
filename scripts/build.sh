@@ -43,4 +43,10 @@ fi
 
 [[ -n ${IDF_PATH:-} ]] || in_container "$@"
 export IDF_TARGET=esp32s31
+# ccache for ESP-IDF's own sources too. The three firmwares build in three directories: paths are
+# made relative to the project, and the build directory is left out of the hash, so they share
+# the cache (debug info then names the first directory, which nothing here reads).
+if command -v ccache >/dev/null; then
+    export IDF_CCACHE_ENABLE=1 CCACHE_BASEDIR=$PWD CCACHE_NOHASHDIR=true
+fi
 for app in "${selected[@]}"; do build_app "$app"; done
