@@ -1,2 +1,5 @@
 # The app of build/selftest.bin (scripts/build.sh adds this file to sdkconfig.defaults).
 CONFIG_PRISM_APP_SELFTEST=y
+# Boot without PSRAM too, so the self-test can say it is missing instead of IDF aborting. IDF
+# offers this only without CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY, which the panel demos set.
+CONFIG_SPIRAM_IGNORE_NOTFOUND=y

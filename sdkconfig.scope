@@ -1,2 +1,5 @@
 # The app of build/scope.bin (scripts/build.sh adds this file to sdkconfig.defaults).
 CONFIG_PRISM_APP_SCOPE=y
+# The profile recorder's 768 KiB of .bss goes to PSRAM (boards/korvo1/linker.lf). The panel needs
+# PSRAM anyway: without it this firmware aborts at boot ("Failed to init external RAM").
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y

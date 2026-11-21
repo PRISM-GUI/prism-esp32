@@ -13,4 +13,7 @@ entries:
 [mapping:prism_profile]
 archive: libprism.a
 entries:
-    profile_global (prism_profile_to_psram)
+    if SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY = y:
+        profile_global (prism_profile_to_psram)
+    else:
+        profile_global (default)

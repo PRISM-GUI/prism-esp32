@@ -2,8 +2,6 @@
 CONFIG_IDF_TARGET="esp32s31"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
-# Boot without PSRAM too, so the self-test can say it is missing instead of IDF aborting.
-CONFIG_SPIRAM_IGNORE_NOTFOUND=y
 # A 3 MB app partition (partitions.csv): the self-test alone fills 82% of the default 1 MB, and
 # the scope is over the 1.5 MB of the large preset.
 CONFIG_PARTITION_TABLE_CUSTOM=y
@@ -48,4 +46,3 @@ CONFIG_BSP_LCD_RGB_REFRESH_AUTO=y
 CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_HEIGHT=10
 # The CPU instead of the PPA for the ARGB8888 -> RGB565 conversion (slower; if the PPA fails).
 # CONFIG_PRISM_DISPLAY_CPU_CONVERT is not set
-CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
