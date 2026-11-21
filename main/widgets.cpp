@@ -24,4 +24,5 @@ extern "C" void app_main()
         ctx.on_stats(korvo1::print_stats);
         ctx.on_loop(korvo1::dump_profile_on_play());
     }, korvo1::pinned_threads());
+    korvo1::halt_runtime_stopped();
 }

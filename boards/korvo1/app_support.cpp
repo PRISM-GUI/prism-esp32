@@ -10,11 +10,27 @@
 
 namespace korvo1 {
 
+namespace {
+
+[[noreturn]] void idle_forever()
+{
+    for (;;)
+        vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
+} // namespace
+
 void halt(const std::string &error)
 {
     std::printf("display: %s\n", error.c_str());
-    for (;;)
-        vTaskDelay(pdMS_TO_TICKS(1000));
+    idle_forever();
+}
+
+void halt_runtime_stopped()
+{
+    std::printf("frame runtime: a thread could not start. Not enough internal RAM for the "
+                "runtime's threads? The two 75 KB bands use internal RAM too\n");
+    idle_forever();
 }
 
 void print_stats(std::string_view line)

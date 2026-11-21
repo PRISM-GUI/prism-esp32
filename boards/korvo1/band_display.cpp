@@ -176,6 +176,9 @@ ppa_client_handle_t ppa_copier()
 
 void display_detail::HeapFree::operator()(std::uint16_t *p) const { heap_caps_free(p); }
 void display_detail::SemaphoreDelete::operator()(SemaphoreHandle_t s) const { vSemaphoreDelete(s); }
+// simplify: a BandDisplay going away does not wait for PPA copies in flight; frame_app never
+// returns on this board, so it never goes away mid-copy. Upgrade: take both band semaphores
+// before unregistering.
 void display_detail::PpaUnregister::operator()(ppa_client_handle_t c) const { ppa_unregister_client(c); }
 void display_detail::PanelDelete::operator()(esp_lcd_panel_handle_t p) const { esp_lcd_panel_del(p); }
 
@@ -278,7 +281,8 @@ esp_err_t BandDisplay::copy(int index, int first_row, int rows)
     held_[index] = false;
     if constexpr (kCpuCopy) {
         // The band's stride is the panel's: its rows are one contiguous run there too.
-        std::memcpy(panel_buffers_[back_index_] + std::size_t(first_row) * kWidth, bands_[index].get(), std::size_t(rows) * kWidth * sizeof(std::uint16_t));
+        std::memcpy(panel_buffers_[back_index_] + std::size_t(first_row) * kWidth, bands_[index].get(),
+                    std::size_t(rows) * kWidth * sizeof(std::uint16_t));
         xSemaphoreGive(copied_[index].get());
         return ESP_OK;
     } else {
@@ -300,6 +304,8 @@ void BandDisplay::wait_for_panel()
     flip_pending_ = false;
 }
 
+// simplify: a failed band copy leaves that band's rows stale in the shown frame (only the first
+// failure is logged). Upgrade: a per-frame failed flag that makes present() skip draw_bitmap.
 void BandDisplay::report_first_failure(esp_err_t err)
 {
     if (err == ESP_OK || copy_failed_)

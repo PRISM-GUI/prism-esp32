@@ -15,6 +15,10 @@ namespace korvo1 {
 // No screen to run on: say why, then stay here so the line stays readable on the console.
 [[noreturn]] void halt(const std::string &error);
 
+// frame_app returned: on this board only when a runtime thread could not start. Says so, with a
+// hint, instead of leaving a black screen, then stays here as halt does.
+[[noreturn]] void halt_runtime_stopped();
+
 void print_stats(std::string_view line);
 
 // The touch controller, or a Touch that never sees a finger (the reason is printed).
