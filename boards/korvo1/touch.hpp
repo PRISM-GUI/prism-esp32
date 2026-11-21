@@ -31,6 +31,7 @@ public:
 
 private:
     std::unique_ptr<esp_lcd_touch_t, touch_detail::TouchDelete> handle_;
+    std::optional<prism::core::Point> last_;   // the last sample's finger, or none
 };
 
 } // namespace korvo1

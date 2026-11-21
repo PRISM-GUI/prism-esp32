@@ -182,19 +182,33 @@ std::expected<Display, std::string> Display::open()
 
 std::span<std::uint32_t> Display::back() { return {frame_.get(), kPixels}; }
 
-// simplify: with bounce buffers, a frame that wraps between the stale-signal drain and the flip
-// gives `flipped_` early, and that one present() may return while the old buffer is still read
-// (one torn frame). Upgrade: have the interrupt report which buffer it switched to.
+// simplify: if the panel's interrupt fires between the stale-signal drain and the driver arming
+// the switch (its cache write-back of the buffer included), `flipped_` is given for the old
+// buffer, and that one present() returns while the panel still reads what is now back(): one
+// torn frame. In both modes: the link-switch event without bounce buffers, the frame wrap with
+// them. Upgrade: have the interrupt report which buffer it switched to.
 void Display::present()
 {
     std::uint16_t *target = panel_buffers_[back_index_];
-    ESP_ERROR_CHECK_WITHOUT_ABORT(convert_into(target));
+    report_first_failure(convert_into(target));
     xSemaphoreTake(flipped_.get(), 0);
     // A buffer of the panel's own: the driver only writes the cache back and switches to it.
     ESP_ERROR_CHECK_WITHOUT_ABORT(
         esp_lcd_panel_draw_bitmap(panel_.get(), 0, 0, kWidth, kHeight, target));
     xSemaphoreTake(flipped_.get(), kFlipTimeout);
     back_index_ ^= 1;
+}
+
+void Display::report_first_failure(esp_err_t err)
+{
+    if (err == ESP_OK || conversion_failed_)
+        return;
+    conversion_failed_ = true;
+    ESP_LOGE("display", "%s",
+             failure("frame conversion failed", err,
+                     "build with CONFIG_PRISM_DISPLAY_CPU_CONVERT=y to convert on the CPU "
+                     "instead; later failures are not reported")
+                 .c_str());
 }
 
 esp_err_t Display::convert_into(std::uint16_t *panel_buffer)

@@ -66,6 +66,7 @@ private:
 
     Display() = default;
     esp_err_t convert_into(std::uint16_t *panel_buffer);
+    void report_first_failure(esp_err_t err);   // logged once, not every frame
 
     // Declared in the order they are made: the panel goes first on destruction, so its
     // interrupt stops giving `flipped_` before the semaphore is deleted.
@@ -75,6 +76,7 @@ private:
     Panel panel_;
     std::array<std::uint16_t *, 2> panel_buffers_{};
     int back_index_ = 1;  // the panel starts on buffer 0
+    bool conversion_failed_ = false;
 };
 
 } // namespace korvo1
