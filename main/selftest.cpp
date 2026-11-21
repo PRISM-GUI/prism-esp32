@@ -71,20 +71,39 @@ void check_thread_join()
 
 int core_running_vector_instruction()
 {
-    asm volatile("esp.zero.q q0");
+    asm volatile("esp.zero.q q0" ::: "memory");
     return esp_cpu_get_core_id();
+}
+
+// Straight to the console, not into the report: an illegal instruction reboots the board before
+// the report is printed, and this line is then the last one on the console.
+void warn_before_simd_check()
+{
+    std::printf("SIMD check on core 1: if the board resets here with an illegal-instruction panic, "
+                "the SIMD core is core 0: swap the pins in pinned_threads()\n");
+    std::fflush(stdout);
+}
+
+int run_vector_instruction_pinned_to(int core)
+{
+    esp_pthread_cfg_t previous;
+    const bool had_previous = esp_pthread_get_cfg(&previous) == ESP_OK;
+    auto cfg = esp_pthread_get_default_config();
+    cfg.pin_to_core = core;
+    esp_pthread_set_cfg(&cfg);
+    std::atomic<int> ran_on{-1};
+    std::thread worker([&] { ran_on = core_running_vector_instruction(); });
+    worker.join();
+    auto restore = had_previous ? previous : esp_pthread_get_default_config();
+    esp_pthread_set_cfg(&restore);
+    return ran_on.load();
 }
 
 void check_simd_core()
 {
     constexpr int kSimdCore = 1;
-    std::atomic<int> core{-1};
-    auto cfg = esp_pthread_get_default_config();
-    cfg.pin_to_core = kSimdCore;
-    esp_pthread_set_cfg(&cfg);
-    std::thread worker([&] { core = core_running_vector_instruction(); });
-    worker.join();
-    check("SIMD on core 1", core.load() == kSimdCore,
+    warn_before_simd_check();
+    check("SIMD on core 1", run_vector_instruction_pinned_to(kSimdCore) == kSimdCore,
           "the SIMD core is core 0 on this chip: swap the pins in pinned_threads()");
 }
 
