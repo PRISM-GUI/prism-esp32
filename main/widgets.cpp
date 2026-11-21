@@ -2,6 +2,7 @@
 // (a logic and a render thread), the timing line on the panel and on the console.
 
 #include "display.hpp"
+#include "profile_dump.hpp"
 #include "touch.hpp"
 
 #include <embedded/widgets_app.hpp>
@@ -48,5 +49,6 @@ extern "C" void app_main()
     prism::platform::frame_app(*display, input, model, [](prism::platform::FrameContext &ctx) {
         prism_examples::attach_widgets(ctx, model);
         ctx.on_stats(print_stats);
+        ctx.on_loop(korvo1::dump_profile_on_play());
     });
 }

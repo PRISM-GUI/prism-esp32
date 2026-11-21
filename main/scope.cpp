@@ -2,6 +2,7 @@
 // (a waveform and a spectrum), the synthetic sweep when the microphones do not start.
 
 #include "display.hpp"
+#include "profile_dump.hpp"
 #include "mic_source.hpp"
 #include "touch.hpp"
 
@@ -59,5 +60,6 @@ extern "C" void app_main()
     prism::platform::frame_app(*display, input, model, [](prism::platform::FrameContext &ctx) {
         prism_examples::attach_scope(ctx, model, state);
         ctx.on_stats(print_stats);
+        ctx.on_loop(korvo1::dump_profile_on_play());
     });
 }

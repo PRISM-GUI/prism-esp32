@@ -1,0 +1,14 @@
+# PRISM's profile recorder (src/profile/global.cpp) is one static array of 4096 x 8 events:
+# 768 KiB of zero-initialised data, more than the internal RAM has left. It goes to PSRAM.
+[sections:prism_profile_bss]
+entries:
+    .bss+
+
+[scheme:prism_profile_to_psram]
+entries:
+    prism_profile_bss -> extern_ram
+
+[mapping:prism_profile]
+archive: libprism.a
+entries:
+    profile_global (prism_profile_to_psram)

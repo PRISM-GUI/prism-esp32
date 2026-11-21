@@ -94,7 +94,7 @@ endfunction()
 
 function(prism_profiling_option out)
     if(PRISM_PROFILING)
-        set(${out} -Dprofiling=enabled PARENT_SCOPE)
+        set(${out} -Dprofiling=enabled -Dprofiling_events=4096 -Dprofiling_threads=8 PARENT_SCOPE)
     else()
         set(${out} -Dprofiling=disabled PARENT_SCOPE)
     endif()
