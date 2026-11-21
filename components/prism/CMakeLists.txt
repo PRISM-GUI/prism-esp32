@@ -100,10 +100,24 @@ function(prism_profiling_option out)
     endif()
 endfunction()
 
+# The cross file and the contents of the response files it names: a new ESP-IDF can change
+# -march in those files while the cross file stays the same.
+function(prism_cross_hash out)
+    file(READ "${PRISM_CROSS_FILE}" content)
+    foreach(flags IN ITEMS "${CMAKE_C_FLAGS}" "${CMAKE_CXX_FLAGS}")
+        prism_response_file(response "${flags}")
+        string(REGEX REPLACE "^@" "" path "${response}")
+        file(READ "${path}" response_content)
+        string(APPEND content "${response_content}")
+    endforeach()
+    string(SHA256 hash "${content}")
+    set(${out} "${hash}" PARENT_SCOPE)
+endfunction()
+
 # Reconfiguring keeps a Meson build directory's first cross file: a new one needs a wipe.
 function(prism_meson_setup)
     prism_profiling_option(profiling)
-    file(SHA256 "${PRISM_CROSS_FILE}" cross_hash)
+    prism_cross_hash(cross_hash)
     set(setup_args
         --cross-file "${PRISM_CROSS_FILE}"
         --buildtype=plain -Dwerror=false
@@ -120,7 +134,8 @@ function(prism_meson_setup)
         COMMAND "${MESON_EXECUTABLE}" setup ${setup_args} "${PRISM_MESON_DIR}" "${PRISM_SOURCE_DIR}"
         RESULT_VARIABLE result)
     if(NOT result EQUAL 0)
-        message(FATAL_ERROR "meson setup of PRISM failed; its log: ${PRISM_MESON_DIR}/meson-logs/meson-log.txt")
+        message(FATAL_ERROR "meson setup of PRISM failed. Read ${PRISM_MESON_DIR}/meson-logs/meson-log.txt; "
+                            "if it is a stale build directory, delete ${PRISM_MESON_DIR} and build again")
     endif()
     set(PRISM_MESON_CROSS_HASH "${cross_hash}" CACHE INTERNAL "")
 endfunction()
@@ -130,7 +145,8 @@ function(prism_introspect_targets out)
         COMMAND "${MESON_EXECUTABLE}" introspect --targets "${PRISM_MESON_DIR}"
         OUTPUT_VARIABLE json RESULT_VARIABLE result)
     if(NOT result EQUAL 0)
-        message(FATAL_ERROR "meson introspect --targets ${PRISM_MESON_DIR} failed")
+        message(FATAL_ERROR "meson introspect --targets ${PRISM_MESON_DIR} failed: delete "
+                            "${PRISM_MESON_DIR} and build again, so Meson sets it up from scratch")
     endif()
     set(${out} "${json}" PARENT_SCOPE)
 endfunction()
@@ -164,7 +180,8 @@ function(prism_target_parameters json target_name out)
             return()
         endif()
     endforeach()
-    message(FATAL_ERROR "PRISM's Meson build has no target ${target_name}")
+    message(FATAL_ERROR "PRISM's Meson build has no target ${target_name}: subprojects/prism is "
+                        "too old (it needs examples/embedded); update it with git submodule update")
 endfunction()
 
 # What a file including PRISM's headers needs: the include directories, -freflection and the
@@ -184,8 +201,10 @@ function(prism_usage_flags json out_includes out_options)
             if(IS_DIRECTORY "${dir}")
                 list(APPEND includes "${dir}")
             endif()
-        elseif(p MATCHES "^-D" OR p STREQUAL "-freflection")
+        elseif(p MATCHES "^-D")
             list(APPEND options "${p}")
+        elseif(p STREQUAL "-freflection")
+            list(APPEND options "$<$<COMPILE_LANGUAGE:CXX>:-freflection>")
         endif()
     endforeach()
     list(REMOVE_DUPLICATES includes)

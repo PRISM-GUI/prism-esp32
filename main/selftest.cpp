@@ -42,9 +42,9 @@ void check_thread_join()
 
 void check_snapshot()
 {
+    prism::raster::Fonts fonts;   // the embedded TTFs measure the text, as on the panel; outlives the tree
     prism_examples::WidgetsModel model;
     prism::app::WidgetTree tree(model);
-    prism::raster::Fonts fonts;   // the embedded TTFs measure the text, as on the panel
     tree.set_text_measurer(&fonts);
     auto snap = tree.build_snapshot(800, 480, 1);
     const std::size_t n = snap ? command_count(*snap) : 0;

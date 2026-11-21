@@ -19,7 +19,7 @@ in_container() {
         echo "Neither ESP-IDF (IDF_PATH) nor Podman/Docker found: install one of them." >&2
         exit 1
     }
-    exec "$engine" run --rm -v "$PWD:/project:Z" -w /project "$image" scripts/build.sh "$@"
+    exec "$engine" run --rm -v "$PWD:/project:z" -w /project "$image" scripts/build.sh "$@"
 }
 
 build_app() {
