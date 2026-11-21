@@ -111,6 +111,18 @@ If something is wrong, the line says what to do next. For example
 
 `widgets` and `scope` record where the time goes. The recorder lives in PSRAM.
 
+**In the browser (Chrome or Edge, nothing to install):**
+
+1. Flash `widgets.bin` or `scope.bin`, and close any terminal on the port.
+2. Open [PRISM trace](https://jeandet.github.io/PRISM/trace.html), press **Connect** and pick
+   the board. Its console appears in the page.
+3. Let the demo run for 15 seconds, then press the **MODE** button.
+4. When the page says the trace arrived, press **Open in Perfetto**.
+
+The page's summary should say `1000000 ticks/s` and `0 warning(s)`.
+
+**With the command-line tool:**
+
 1. Flash `widgets.bin` or `scope.bin`. Open no terminal on the port.
 2. Build `prism-trace` once, from a PRISM checkout (the `io` option must be on):
 
