@@ -190,7 +190,10 @@ std::span<std::uint32_t> Display::back() { return {frame_.get(), kPixels}; }
 void Display::present()
 {
     std::uint16_t *target = panel_buffers_[back_index_];
-    report_first_failure(convert_into(target));
+    const esp_err_t converted = convert_into(target);
+    report_first_failure(converted);
+    if (converted != ESP_OK)
+        return;   // the buffer was not written: keep showing the last good one
     xSemaphoreTake(flipped_.get(), 0);
     // A buffer of the panel's own: the driver only writes the cache back and switches to it.
     ESP_ERROR_CHECK_WITHOUT_ABORT(

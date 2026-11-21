@@ -2,7 +2,7 @@
 # system counters, the profile clock), and the panel and touch as PRISM's FrameSink and
 # TouchSource, and the microphones as the scope's SampleSource. main requires it.
 idf_component_register(
-    SRCS port.cpp profile_clock.cpp display.cpp touch.cpp mic_source.cpp bsp_timing.c
+    SRCS app_support.cpp port.cpp profile_clock.cpp display.cpp touch.cpp mic_source.cpp bsp_timing.c
          uart_stream.cpp buttons.cpp profile_dump.cpp
     INCLUDE_DIRS .
     LDFRAGMENTS linker.lf

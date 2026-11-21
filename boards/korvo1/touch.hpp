@@ -5,6 +5,7 @@
 
 #include <prism/platform/frame_target.hpp>
 
+#include "esp_err.h"
 #include "esp_lcd_touch.h"
 
 #include <expected>
@@ -31,7 +32,12 @@ public:
 
 private:
     std::unique_ptr<esp_lcd_touch_t, touch_detail::TouchDelete> handle_;
+    std::optional<prism::core::Point> after_error(esp_err_t err);
+
+    static constexpr int kMaxErrors = 5;
     std::optional<prism::core::Point> last_;   // the last sample's finger, or none
+    int errors_ = 0;                           // failed reads in a row
+    bool reported_ = false;                    // the first failure was printed
 };
 
 } // namespace korvo1

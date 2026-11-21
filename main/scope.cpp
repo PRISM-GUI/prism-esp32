@@ -1,6 +1,7 @@
 // The audio scope on the Korvo-1's panel: the board's microphones through PRISM's shared scope
 // (a waveform and a spectrum), the synthetic sweep when the microphones do not start.
 
+#include "app_support.hpp"
 #include "display.hpp"
 #include "profile_dump.hpp"
 #include "mic_source.hpp"
@@ -12,26 +13,8 @@
 
 #include <cstdio>
 #include <memory>
-#include <string>
-#include <string_view>
-#include <utility>
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 namespace {
-
-[[noreturn]] void halt(const std::string &error)
-{
-    std::printf("display: %s\n", error.c_str());
-    for (;;)
-        vTaskDelay(pdMS_TO_TICKS(1000));
-}
-
-void print_stats(std::string_view line)
-{
-    std::printf("%.*s\n", int(line.size()), line.data());
-}
 
 prism_examples::SampleSource &scope_source()
 {
@@ -49,17 +32,14 @@ extern "C" void app_main()
 {
     auto display = korvo1::Display::open();
     if (!display)
-        halt(display.error());
-    auto touch = korvo1::Touch::open();
-    if (!touch)
-        std::printf("touch: %s\n", touch.error().c_str());
-    korvo1::Touch input = std::move(touch).value_or(korvo1::Touch{});
+        korvo1::halt(display.error());
+    korvo1::Touch input = korvo1::open_touch_or_none();
 
     static prism_examples::ScopeModel model;
     static prism_examples::ScopeState state{scope_source()};
     prism::platform::frame_app(*display, input, model, [](prism::platform::FrameContext &ctx) {
         prism_examples::attach_scope(ctx, model, state);
-        ctx.on_stats(print_stats);
+        ctx.on_stats(korvo1::print_stats);
         ctx.on_loop(korvo1::dump_profile_on_play());
     });
 }
