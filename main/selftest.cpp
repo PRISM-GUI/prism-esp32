@@ -13,7 +13,9 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
+#include <cstdarg>
 #include <cstdio>
+#include <string>
 #include <thread>
 
 #include "freertos/FreeRTOS.h"
@@ -27,13 +29,27 @@
 namespace {
 
 int failures = 0;
+// The checks are over within two seconds of reset, before most terminals are open: app_main
+// prints the whole report again every few seconds.
+std::string report;
+
+void say(const char *fmt, ...)
+{
+    char line[192];
+    va_list args;
+    va_start(args, fmt);
+    std::vsnprintf(line, sizeof line, fmt, args);
+    va_end(args);
+    std::fputs(line, stdout);
+    report += line;
+}
 
 void check(const char *line, bool ok, const char *hint = nullptr)
 {
-    std::printf("%s %s\n", line, ok ? "PASS" : "FAIL");
+    say("%s %s\n", line, ok ? "PASS" : "FAIL");
     if (ok) return;
     ++failures;
-    if (hint) std::printf("  %s\n", hint);
+    if (hint) say("  %s\n", hint);
 }
 
 std::size_t command_count(const prism::render::SceneSnapshot &snap)
@@ -76,7 +92,7 @@ void check_psram()
     char line[32];
     std::snprintf(line, sizeof line, "PSRAM: %zu MB", mb);
     check(line, found && mb > 0);
-    if (!found) std::printf("  no PSRAM found: enable CONFIG_SPIRAM, or is this a WROOM-3 module?\n");
+    if (!found) say("  no PSRAM found: enable CONFIG_SPIRAM, or is this a WROOM-3 module?\n");
 }
 
 void check_allocation_count()
@@ -149,7 +165,7 @@ void check_profile_clock_monotonic()
 
 extern "C" void app_main(void)
 {
-    std::printf("PRISM self-test on the ESP32-S31-Korvo-1\n");
+    say("PRISM self-test on the ESP32-S31-Korvo-1\n");
     check_thread_join();
     check_snapshot();
     check_psram();
@@ -157,5 +173,9 @@ extern "C" void app_main(void)
     check_system_counters();
     check_profile_clock_rate();
     check_profile_clock_monotonic();
-    std::printf("failures: %d\n", failures);
+    say("failures: %d\n", failures);
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        std::printf("\n(the self-test result again; press the reset button to run it again)\n%s", report.c_str());
+    }
 }
