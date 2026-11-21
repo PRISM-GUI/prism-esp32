@@ -1,0 +1,22 @@
+menu "PRISM firmware"
+
+    # scripts/build.sh picks it per firmware (sdkconfig.<app>); main/<name>.cpp is the app.
+    choice PRISM_APP
+        prompt "The app this firmware runs"
+        default PRISM_APP_SELFTEST
+
+        config PRISM_APP_SELFTEST
+            bool "selftest: the on-board checks, on the console"
+        config PRISM_APP_WIDGETS
+            bool "widgets: the widget demo on the panel"
+        config PRISM_APP_SCOPE
+            bool "scope: the microphone scope on the panel"
+    endchoice
+
+    config PRISM_APP_NAME
+        string
+        default "selftest" if PRISM_APP_SELFTEST
+        default "widgets" if PRISM_APP_WIDGETS
+        default "scope" if PRISM_APP_SCOPE
+
+endmenu

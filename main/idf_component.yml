@@ -1,5 +1,2 @@
 dependencies:
   idf: ">=6.0"
-  # The board without LVGL: the _noglib variant is the BSP built with BSP_CONFIG_NO_GRAPHIC_LIB=1
-  # (the plain one would still fetch and build LVGL and esp_lvgl_port).
-  espressif/esp32_s31_korvo_1_noglib: "==1.1.0"

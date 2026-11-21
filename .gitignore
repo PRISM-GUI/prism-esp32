@@ -4,3 +4,6 @@ managed_components/
 sdkconfig
 sdkconfig.old
 .superpowers/
+host-build/
+host/subprojects/*/
+host/subprojects/packagecache/

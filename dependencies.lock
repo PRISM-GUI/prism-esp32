@@ -249,6 +249,6 @@ dependencies:
 direct_dependencies:
 - espressif/esp32_s31_korvo_1_noglib
 - idf
-manifest_hash: 127ae15c10d140c6b777d3e6499074f7847d60abb685785a3217bb1e4287a1b5
+manifest_hash: 45b83f58336ce5926e27c76274ea650bf2db9c5bbbe45de12661b7d5c96cd864
 target: esp32s31
 version: 3.0.0

@@ -28,3 +28,21 @@ CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
 CONFIG_FREERTOS_RUN_TIME_COUNTER_TYPE_U64=y
 CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y
 CONFIG_HEAP_USE_HOOKS=y
+
+# PRISM's frames are drawn on the CPU: -O2 for the whole firmware, PRISM included (its Meson
+# build takes IDF's flags). IDF's default is -Og.
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+
+# Board-support errors come back as error codes, which the apps print with a hint, instead of
+# the BSP aborting on them.
+# CONFIG_BSP_ERROR_CHECK is not set
+
+# The panel (boards/korvo1/display.cpp). If the picture shifts sideways, PSRAM cannot keep up:
+# first try bounce buffers (CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_MODE=y instead of _REFRESH_AUTO),
+# then a lower pixel clock. 18 MHz is the board-support package's own.
+CONFIG_PRISM_LCD_PCLK_MHZ=18
+CONFIG_BSP_LCD_RGB_REFRESH_AUTO=y
+# CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_MODE is not set
+CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_HEIGHT=10
+# The CPU instead of the PPA for the ARGB8888 -> RGB565 conversion (slower; if the PPA fails).
+# CONFIG_PRISM_DISPLAY_CPU_CONVERT is not set

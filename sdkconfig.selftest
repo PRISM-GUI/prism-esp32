@@ -1,0 +1,2 @@
+# The app of build/selftest.bin (scripts/build.sh adds this file to sdkconfig.defaults).
+CONFIG_PRISM_APP_SELFTEST=y

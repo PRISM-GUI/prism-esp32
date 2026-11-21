@@ -1,8 +1,13 @@
 cmake_minimum_required(VERSION 3.22)
+
+# Which firmware to build: idf.py -B build/<app> -DPRISM_APP=<app> build (scripts/build.sh does).
+# Its ELF is <app>.elf and its configuration build/<app>/sdkconfig, made from sdkconfig.defaults
+# plus sdkconfig.<app>, which picks the app in Kconfig (main/Kconfig.projbuild).
+set(PRISM_APP selftest CACHE STRING "The firmware to build: selftest, widgets or scope")
+set(SDKCONFIG "${CMAKE_BINARY_DIR}/sdkconfig")
+set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults"
+                       "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.${PRISM_APP}")
+
 set(EXTRA_COMPONENT_DIRS ${CMAKE_CURRENT_LIST_DIR}/boards/korvo1)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-
-# Which firmware to build: main/<PRISM_APP>.cpp, linked as <PRISM_APP>.elf
-# (idf.py -DPRISM_APP=selftest build; scripts/build.sh passes it).
-set(PRISM_APP selftest CACHE STRING "The firmware to build: selftest")
 project(${PRISM_APP})
