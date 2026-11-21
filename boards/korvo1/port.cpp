@@ -39,12 +39,13 @@ Heap heap_of(std::uint32_t caps)
     return {info.total_allocated_bytes, info.total_allocated_bytes + info.total_free_bytes};
 }
 
-std::uint64_t idle_us_of_both_cores()
+// The mean, not the sum: the CPU line reads idle time as the share of one second one core was idle.
+std::uint64_t idle_us_of_average_core()
 {
     std::uint64_t sum = 0;
     for (BaseType_t core = 0; core < configNUMBER_OF_CORES; ++core)
         sum += ulTaskGetIdleRunTimeCounterForCore(core);
-    return sum;
+    return sum / configNUMBER_OF_CORES;
 }
 
 } // namespace
@@ -90,7 +91,7 @@ std::optional<prism::platform::SystemCounters> prism::platform::system_counters(
     const Heap heap = heap_of(MALLOC_CAP_DEFAULT);
     const Heap internal = heap_of(MALLOC_CAP_INTERNAL);
     return SystemCounters{
-        .idle_us = idle_us_of_both_cores(),
+        .idle_us = idle_us_of_average_core(),
         .heap_used = heap.used,
         .heap_total = heap.total,
         .stacks_used = internal.used,

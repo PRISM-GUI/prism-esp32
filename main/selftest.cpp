@@ -96,6 +96,8 @@ void check_system_counters()
                     && a->stacks_total >= a->stacks_used && a->stacks_used > 0
                     && b->idle_us > a->idle_us;
     check("system counters: heap reported, idle grows over 100 ms", ok);
+    check("system counters: idle grows by at most 110 ms over 100 ms",
+          a && b && b->idle_us - a->idle_us <= 110'000);
 }
 
 // The tick rate times the time a 100 ms delay took must come out near 100 ms.
