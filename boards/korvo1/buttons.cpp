@@ -23,6 +23,7 @@ std::unexpected<std::string> failure(const char *what, esp_err_t err)
 
 std::expected<Button, std::string> Button::open(bsp_button_t which)
 {
+    // The BSP creates all four buttons together; open() is called once, so they exist once.
     std::array<button_handle_t, BSP_BUTTON_NUM> handles{};
     if (const esp_err_t err = bsp_iot_button_create(handles.data(), nullptr, handles.size()))
         return failure("buttons", err);

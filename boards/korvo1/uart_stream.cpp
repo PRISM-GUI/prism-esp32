@@ -28,7 +28,7 @@ std::expected<UartStream, std::string> UartStream::open()
     const esp_err_t err = install_driver_once();
     if (err != ESP_OK)
         return std::unexpected(std::string("UART0 driver: ") + esp_err_to_name(err) +
-                               "; the profile dump needs the console UART");
+                               "; the profile dump needs the UART driver on UART0: check that no other code installed it with other settings");
     return UartStream{};
 }
 

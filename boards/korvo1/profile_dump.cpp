@@ -23,15 +23,17 @@ struct DumpOnPlay {
 // for the whole dump, so no line lands inside a chunk.
 void dump_with_console_held(UartStream &uart)
 {
-    std::fflush(stdout);
     flockfile(stdout);
+    std::fflush(stdout);
     const auto dumped = prism::profile::dump(prism::profile::global(), uart);
     uart.drain();
     funlockfile(stdout);
     if (dumped)
         std::printf("\nprofile: dump done (%zu bytes)\n", uart.bytes_written());
     else
-        std::printf("\nprofile: dump failed: %s\n", dumped.error().message().c_str());
+        std::printf("\nprofile: dump failed: %s; is prism-trace listening on this port at 921600? "
+                    "press MODE again\n",
+                    dumped.error().message().c_str());
 }
 
 void dump_if_pressed(DumpOnPlay &state)
@@ -50,7 +52,10 @@ std::function<void()> dump_profile_on_play()
     auto play = Button::open(BSP_BUTTON_MODE);
     auto uart = UartStream::open();
     if (!play || !uart) {
-        std::printf("profile dump unavailable: %s\n", (play ? uart.error() : play.error()).c_str());
+        std::printf("profile dump unavailable (%s): the MODE button or the console UART could not be "
+                    "set up; check the other tasks do not own the ADC or UART0. The demo runs "
+                    "without the dump\n",
+                    (play ? uart.error() : play.error()).c_str());
         return [] {};
     }
     auto state = std::make_shared<DumpOnPlay>(DumpOnPlay{std::move(*play), std::move(*uart)});

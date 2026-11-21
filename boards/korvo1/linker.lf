@@ -8,6 +8,8 @@ entries:
 entries:
     prism_profile_bss -> extern_ram
 
+# profile_global is PRISM's archive member name: a rename in PRISM shows up as an internal-RAM
+# overflow at link time.
 [mapping:prism_profile]
 archive: libprism.a
 entries:
