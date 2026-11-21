@@ -6,9 +6,18 @@
 #include <prism/raster/fonts.hpp>
 #include <prism/render/scene_snapshot.hpp>
 
+#include <prism/platform/alloc_count.hpp>
+#include <prism/platform/frame_stats.hpp>
+#include <prism/profile/recorder.hpp>
+
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <thread>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "sdkconfig.h"
 #if CONFIG_SPIRAM
@@ -68,6 +77,65 @@ void check_psram()
     if (!found) std::printf("  no PSRAM found: enable CONFIG_SPIRAM, or is this a WROOM-3 module?\n");
 }
 
+void check_allocation_count()
+{
+    const auto before = prism::platform::allocation_count();
+    int *p = new int(1);
+    asm volatile("" : : "r"(p) : "memory");   // the optimiser may not drop the new
+    const auto after = prism::platform::allocation_count();
+    delete p;
+    check("allocation count: new +1", after - before == 1);
+}
+
+void check_system_counters()
+{
+    const auto a = prism::platform::system_counters();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    const auto b = prism::platform::system_counters();
+    const bool ok = a && b && a->heap_used > 0 && a->heap_total >= a->heap_used
+                    && a->stacks_total >= a->stacks_used && a->stacks_used > 0
+                    && b->idle_us > a->idle_us;
+    check("system counters: heap reported, idle grows over 100 ms", ok);
+}
+
+// The tick rate times the time a 100 ms delay took must come out near 100 ms.
+void check_profile_clock_rate()
+{
+    const auto tps = prism::platform::profile_ticks_per_second();
+    const auto t0 = prism::platform::profile_ticks();
+    vTaskDelay(pdMS_TO_TICKS(100));
+    const auto ms = (prism::platform::profile_ticks() - t0) * 1000 / tps;
+    char line[64];
+    std::snprintf(line, sizeof line, "profile clock: %llu ticks per second",
+                  static_cast<unsigned long long>(tps));
+    check(line, tps >= 1'000'000 && ms >= 99 && ms <= 120);
+}
+
+bool never_goes_back(int reads)
+{
+    std::uint64_t last = 0;
+    for (int i = 0; i < reads; ++i) {
+        const auto now = prism::platform::profile_ticks();
+        if (now < last) return false;
+        last = now;
+    }
+    return true;
+}
+
+// Tasks without a core affinity, more of them than cores, so they migrate: a per-core counter
+// would jump back when one lands on the other core.
+void check_profile_clock_monotonic()
+{
+    std::array<std::atomic<bool>, 4> ok{};
+    std::array<std::thread, 4> readers;
+    for (std::size_t i = 0; i < readers.size(); ++i)
+        readers[i] = std::thread([&ok, i] { ok[i] = never_goes_back(1'000'000); });
+    for (auto &t : readers) t.join();
+    bool all = true;
+    for (const auto &o : ok) all = all && o.load();
+    check("profile clock never goes back over 1e6 reads", all);
+}
+
 } // namespace
 
 extern "C" void app_main(void)
@@ -76,5 +144,9 @@ extern "C" void app_main(void)
     check_thread_join();
     check_snapshot();
     check_psram();
+    check_allocation_count();
+    check_system_counters();
+    check_profile_clock_rate();
+    check_profile_clock_monotonic();
     std::printf("failures: %d\n", failures);
 }

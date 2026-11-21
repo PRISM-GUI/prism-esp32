@@ -21,3 +21,9 @@ CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
 # app_main builds a whole snapshot of an 800x480 view.
 CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
 CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT=16384
+
+# Idle-task run time for the timing line: 64-bit (a 32-bit microsecond counter wraps in 71 min),
+# counted by the IDF timer (the CPU clock's counter differs per core).
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+CONFIG_FREERTOS_RUN_TIME_COUNTER_TYPE_U64=y
+CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER=y
