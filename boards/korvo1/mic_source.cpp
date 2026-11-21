@@ -27,17 +27,38 @@ constexpr int kReadError = 20;   // ticks to wait before retrying a failed read,
 
 constexpr std::int64_t kReportEveryUs = 5'000'000;
 
-// Names the next thread this one creates "mic" and, when destroyed, takes the name back so the
-// threads created later (the frame runtime's) keep their defaults. The stack stays the default.
+// Names the next thread this one creates "mic" and, when destroyed, puts back the config the caller
+// had (or the default one), so the threads created later (the frame runtime's) keep their names.
+// The stack stays the default. A failure only leaves the thread unnamed: it is reported, not fatal.
 class MicThreadName {
 public:
     MicThreadName()
     {
+        had_previous_ = esp_pthread_get_cfg(&previous_) == ESP_OK;
         esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
         cfg.thread_name = "mic";
-        esp_pthread_set_cfg(&cfg);
+        named_ = report(esp_pthread_set_cfg(&cfg), "naming the mic thread");
     }
-    ~MicThreadName() { esp_pthread_set_cfg(nullptr); }
+    ~MicThreadName()
+    {
+        if (named_)
+            report(esp_pthread_set_cfg(had_previous_ ? &previous_ : &default_), "restoring the pthread config");
+    }
+    MicThreadName(const MicThreadName &) = delete;
+    MicThreadName &operator=(const MicThreadName &) = delete;
+
+private:
+    static bool report(esp_err_t err, const char *what)
+    {
+        if (err != ESP_OK)
+            std::printf("microphones: %s failed (%s)\n", what, esp_err_to_name(err));
+        return err == ESP_OK;
+    }
+
+    esp_pthread_cfg_t previous_{};
+    esp_pthread_cfg_t default_ = esp_pthread_get_default_config();
+    bool had_previous_ = false;
+    bool named_ = false;
 };
 
 std::string failure(const char *what, const std::string &hint)
