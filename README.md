@@ -88,6 +88,7 @@ What you should see:
       PSRAM: 16 MB PASS
       allocation count: new +1 PASS
       system counters: heap reported, idle grows over 100 ms PASS
+      system counters: idle grows by at most 110 ms over 100 ms PASS
       profile clock: 1000000 ticks per second PASS
 
   It ends with `failures: 0`. A `FAIL` line comes with a hint.
@@ -124,10 +125,10 @@ Docker or Podman is all you need.
 
 The images are `build/selftest.bin`, `build/widgets.bin` and `build/scope.bin`.
 
-The script runs in the build image, `ghcr.io/jeandet/prism-esp32-dev`. It has ESP-IDF at
-the pinned commit. To build the image yourself:
+The script runs in the build image, `ghcr.io/jeandet/prism-esp32-dev`, tagged `idf-<sha7>`, the first 7 characters
+of the pinned ESP-IDF commit in `docker/Dockerfile` (and `latest`). It has ESP-IDF at the pinned commit. To build the image yourself:
 
-    podman build -f docker/Dockerfile -t ghcr.io/jeandet/prism-esp32-dev:20261121 .
+    podman build -f docker/Dockerfile -t ghcr.io/jeandet/prism-esp32-dev:idf-<sha7> .
 
 If you already have ESP-IDF in your shell (`IDF_PATH` set), the script runs `idf.py` directly.
 In that case you also need Meson 1.5 or newer.

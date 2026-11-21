@@ -9,7 +9,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 apps=(selftest widgets scope)
-image=${PRISM_ESP32_IMAGE:-ghcr.io/jeandet/prism-esp32-dev:20261121}
+# The image tag is the first 7 characters of the ESP-IDF commit in docker/Dockerfile, so the tag
+# CI publishes and the one used here cannot drift apart.
+idf_tag=idf-$(sed -n 's/^ARG IDF_COMMIT=\(.\{7\}\).*/\1/p' docker/Dockerfile)
+image=${PRISM_ESP32_IMAGE:-ghcr.io/jeandet/prism-esp32-dev:$idf_tag}
 
 usage() { local IFS='|'; echo "usage: $0 [${apps[*]}|all]" >&2; exit 2; }
 
@@ -19,7 +22,10 @@ in_container() {
         echo "Neither ESP-IDF (IDF_PATH) nor Podman/Docker found: install one of them." >&2
         exit 1
     }
-    exec "$engine" run --rm -v "$PWD:/project:z" -w /project "$image" scripts/build.sh "$@"
+    local user_flags=(--userns=keep-id)
+    [[ $engine == *docker ]] && user_flags=(-u "$(id -u):$(id -g)")
+    exec "$engine" run --rm "${user_flags[@]}" -e HOME=/tmp -v "$PWD:/project:z" -w /project \
+        "$image" scripts/build.sh "$@"
 }
 
 build_app() {

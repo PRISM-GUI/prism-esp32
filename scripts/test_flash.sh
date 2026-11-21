@@ -7,7 +7,14 @@ chmod +x "$tmp/esptool.py"
 touch "$tmp/img.bin"
 failures=0
 
-run() { PRISM_ESPTOOL="$tmp/esptool.py" PRISM_FLASH_PORTS="$1" "$here/flash.sh" "${@:2}" 2>&1; }
+# macOS ships bash 3.2 and no newer shell: flash.sh is POSIX sh, run under the plainest sh here.
+shell=$(command -v dash || command -v sh)
+bash4_only='mapfile|readarray|declare -A|\$\{[a-z_]+(,,|\^\^)\}|\[\[ -v|&>>|\|&'
+if grep -E "$bash4_only|\[\[|=\(" "$here/flash.sh" | grep -v '^#'; then
+    echo "FAIL flash.sh uses a bash-only construct"; failures=$((failures+1))
+else echo "PASS flash.sh has no bash-only constructs"; fi
+
+run() { PRISM_ESPTOOL="$tmp/esptool.py" PRISM_FLASH_PORTS="$1" "$shell" "$here/flash.sh" "${@:2}" 2>&1; }
 check() {
     if [[ $2 == *"$3"* ]]; then echo "PASS $1"; else echo "FAIL $1: wanted '$3', got '$2'"; failures=$((failures+1)); fi
 }

@@ -1,20 +1,19 @@
-#!/bin/bash
+#!/bin/sh
 # Flash one merged image to the Korvo-1: scripts/flash.sh <image.bin> [port]
 # Finds the board's serial port itself (Linux: by the USB bridge's VID:PID; macOS: by name).
 # Test hooks: PRISM_FLASH_PORTS replaces the port search, PRISM_ESPTOOL replaces esptool.
-set -uo pipefail
+# POSIX sh on purpose: macOS ships bash 3.2.
 
 # The Korvo-1 guide does not name its USB-UART bridge chip, so match the usual ones:
 # CP210x, CH343, CH340, FTDI.
-bridges=(10c4:ea60 1a86:55d3 1a86:7523 0403:6001 0403:6010 0403:6015)
+bridges=" 10c4:ea60 1a86:55d3 1a86:7523 0403:6001 0403:6010 0403:6015 "
 
 usage() { echo "usage: $0 <image.bin> [port]" >&2; exit 2; }
 die() { echo "$*" >&2; exit 1; }
 
 find_esptool() {
-    local tool
     for tool in "${PRISM_ESPTOOL:-}" esptool.py esptool; do
-        [[ -n $tool ]] && command -v "$tool" && return
+        [ -n "$tool" ] && command -v "$tool" && return
     done
     echo "esptool is not installed." >&2
     echo "Install it with:  pip install esptool    (then run this script again)" >&2
@@ -22,18 +21,16 @@ find_esptool() {
 }
 
 usb_id_of_tty() {
-    local dir
     dir=$(readlink -f "/sys/class/tty/$(basename "$1")/device" 2>/dev/null) || return
-    while [[ -n $dir && $dir != / && ! -e $dir/idVendor ]]; do dir=$(dirname "$dir"); done
-    [[ -e $dir/idVendor ]] && echo "$(<"$dir/idVendor"):$(<"$dir/idProduct")"
+    while [ -n "$dir" ] && [ "$dir" != / ] && [ ! -e "$dir/idVendor" ]; do dir=$(dirname "$dir"); done
+    [ -e "$dir/idVendor" ] && echo "$(cat "$dir/idVendor"):$(cat "$dir/idProduct")"
 }
 
-is_bridge() { [[ " ${bridges[*]} " == *" $1 "* ]]; }
+is_bridge() { case "$bridges" in *" $1 "*) return 0 ;; esac; return 1; }
 
 linux_ports() {
-    local tty
     for tty in /dev/ttyUSB* /dev/ttyACM*; do
-        [[ -e $tty ]] && is_bridge "$(usb_id_of_tty "$tty")" && echo "$tty"
+        [ -e "$tty" ] && is_bridge "$(usb_id_of_tty "$tty")" && echo "$tty"
     done
 }
 
@@ -42,26 +39,24 @@ mac_ports() {
 }
 
 candidate_ports() {
-    if [[ -v PRISM_FLASH_PORTS ]]; then tr ' ' '\n' <<<"$PRISM_FLASH_PORTS" | grep .
-    elif [[ $(uname) == Darwin ]]; then mac_ports
+    if [ "${PRISM_FLASH_PORTS+x}" ]; then echo "$PRISM_FLASH_PORTS" | tr ' ' '\n' | grep .
+    elif [ "$(uname)" = Darwin ]; then mac_ports
     else linux_ports
     fi
 }
 
 pick_port() {
-    local ports
-    mapfile -t ports < <(candidate_ports)
-    case ${#ports[@]} in
-        0) die "no ESP32 board found: is the UART USB-C port (not the power one) plugged in?" ;;
-        1) echo "${ports[0]}" ;;
-        *) printf 'several boards found:\n' >&2; printf '  %s\n' "${ports[@]}" >&2
-           die "run again with the one you want: $0 $image [port]" ;;
-    esac
+    ports=$(candidate_ports)
+    [ -n "$ports" ] || die "no ESP32 board found: is the UART USB-C port (not the power one) plugged in?"
+    [ "$(echo "$ports" | wc -l)" -eq 1 ] && { echo "$ports"; return; }
+    echo "several boards found:" >&2
+    echo "$ports" | sed 's/^/  /' >&2
+    die "run again with the one you want: $0 $image [port]"
 }
 
-[[ $# -ge 1 && $# -le 2 ]] || usage
+[ $# -ge 1 ] && [ $# -le 2 ] || usage
 image=$1
-[[ -f $image ]] || die "image not found: $image (build it with scripts/build.sh, or download it from the releases)"
+[ -f "$image" ] || die "image not found: $image (build it with scripts/build.sh, or download it from the releases)"
 esptool=$(find_esptool) || exit 1
 port=${2:-$(pick_port)} || exit 1
 echo "flashing $image to $port"
