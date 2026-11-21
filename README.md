@@ -13,6 +13,10 @@ The ESP32-S31-Korvo-1 V1.1 is a development board with:
 - two microphones on an ES8389 audio codec,
 - four buttons: SET, MODE, VOLP and VOLM.
 
+The `widgets` and `scope` images need the PSRAM: the screen's frame buffers live in it. On a
+board without PSRAM they cannot run (see "Troubleshooting"). Only `selftest.bin` can tell you
+that.
+
 It has two USB-C ports. Use the one marked UART. The other one only powers the board.
 
 ## The three images
@@ -33,7 +37,9 @@ Where to get them:
 
 ## Flash from the browser
 
-Nothing to install. It works on macOS, Linux and Windows, in Chrome or Edge.
+Nothing to install, if the web flasher knows the ESP32-S31. This chip is new: the flasher
+needs a version that supports it, and I have not verified that it does. If it fails, use
+`esptool` (next section), which is the reliable way. It runs in Chrome or Edge.
 
 1. Plug the board in by its UART USB-C port.
 2. Open [Espressif's web flasher](https://espressif.github.io/esp-launchpad/).
@@ -43,7 +49,8 @@ Nothing to install. It works on macOS, Linux and Windows, in Chrome or Edge.
 
 ## Flash with `flash.sh`
 
-You need `esptool` (`pip install esptool`). If it is missing, the script tells you.
+You need `esptool` 5.6 or newer, the first release that knows the ESP32-S31
+(`pip install "esptool>=5.6"`). If it is missing, the script tells you.
 
     scripts/flash.sh widgets.bin
 
@@ -61,10 +68,11 @@ How it finds the port:
 
 - On Linux it looks at `/dev/ttyUSB*` and `/dev/ttyACM*`. It keeps those whose USB bridge is
   a common one (CP210x 10c4:ea60, CH343 1a86:55d3, CH340 1a86:7523, FTDI 0403:6001, 6010 and
-  6015). Espressif does not say which chip the Korvo-1 uses, so this is a list, not a
+  6015, Espressif's USB serial 303a:1001). Espressif does not say which chip the Korvo-1 uses, so this is a list, not a
   single match. If your board is not found, pass the port yourself.
 - On macOS it lists `/dev/cu.usbserial*`, `cu.wchusbserial*`, `cu.SLAB_USBtoUART*` and
-  `cu.usbmodem*`.
+  `cu.usbmodem*`. One WCH bridge can show up as both `cu.wchusbserial<N>` and
+  `cu.usbserial-<N>`: the script counts it as one board.
 - You may need to be in the `dialout` group on Linux.
 
 `scripts/test_flash.sh` checks the script against a fake `esptool`.
@@ -90,22 +98,33 @@ What you should see:
       system counters: heap reported, idle grows over 100 ms PASS
       system counters: idle grows by at most 110 ms over 100 ms PASS
       profile clock: 1000000 ticks per second PASS
+      profile clock never goes back over 1e6 reads PASS
 
   It ends with `failures: 0`. A `FAIL` line comes with a hint.
 - `widgets` and `scope`: a timing line once a second (update, snapshot, draw and present
   times, and the CPU load).
 
 If something is wrong, the line says what to do next. For example
-`no PSRAM found: is this a WROOM-3 module?`.
+`no PSRAM found: enable CONFIG_SPIRAM, or is this a WROOM-3 module?`.
 
 ## Take a trace
 
 `widgets` and `scope` record where the time goes. The recorder lives in PSRAM.
 
 1. Flash `widgets.bin` or `scope.bin`. Open no terminal on the port.
-2. Start `prism-trace` on the port. Build it from PRISM (`tools/prism-trace/`).
+2. Build `prism-trace` once, from a PRISM checkout (the `io` option must be on):
 
-       prism-trace /dev/ttyUSB0 -o trace.json --baud 921600
+       meson setup build-trace -Dsdl=disabled -Dio=enabled
+       ninja -C build-trace tools/prism-trace/prism-trace
+
+   On macOS with Homebrew's GCC, pick the compiler first:
+
+       CXX=$(ls $(brew --prefix)/bin/g++-1[0-9] | sort -V | tail -1) meson setup build-trace -Dsdl=disabled -Dio=enabled
+
+   Then start it on the port (on macOS the port is `/dev/cu.*`, for example
+   `/dev/cu.usbserial-1410`):
+
+       build-trace/tools/prism-trace/prism-trace /dev/ttyUSB0 -o trace.json --baud 921600
 
 3. Let the demo run for 15 seconds.
 4. Press the **MODE** button. The screen freezes for a few seconds while the dump drains.
@@ -113,6 +132,14 @@ If something is wrong, the line says what to do next. For example
 
 `prism-trace` prints a summary. It should say `1000000 ticks/s` and `0 warning(s)`.
 Open `trace.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
+
+## Troubleshooting
+
+- The board boots, then aborts with `Failed to init external RAM`: this board has no PSRAM.
+  `widgets.bin` and `scope.bin` cannot run on it (the screen needs 3 MB of PSRAM). Flash
+  `selftest.bin` to check: it boots without PSRAM and says `no PSRAM found`.
+- Garbage on the console: the baud rate is not 921600 (the ROM bootloader's first line is
+  always garbage, at 115200).
 
 ## Build it yourself
 
@@ -133,6 +160,15 @@ of the pinned ESP-IDF commit in `docker/Dockerfile` (and `latest`). It has ESP-I
 If you already have ESP-IDF in your shell (`IDF_PATH` set), the script runs `idf.py` directly.
 In that case you also need Meson 1.5 or newer.
 
+The image is `linux/amd64` only. On an Apple-silicon Mac, Docker or Podman runs it under
+emulation, which is slow. There, flash the prebuilt images from a release or a CI run, or use a
+native ESP-IDF install (set `IDF_PATH`, as above).
+
+The package `ghcr.io/jeandet/prism-esp32-dev` must be made public once, by the maintainer, after
+the first CI publish: GitHub, your profile, Packages, the package, Package settings, Change
+visibility (`https://github.com/users/<owner>/packages/container/prism-esp32-dev/settings`).
+Until then, others cannot pull it.
+
 Flash from the host, not from the container. USB does not reach a container on macOS.
 
 PRISM is the git submodule `subprojects/prism`. The container sees only this directory, so
@@ -143,10 +179,12 @@ it must be the submodule, not a symlink to a checkout elsewhere.
 An app is a model and a view, as on the desktop. This repository only holds the board.
 
 1. Write `main/<name>.cpp` with an `app_main()`. Copy `main/widgets.cpp`: it opens the
-   display and the touch, then runs PRISM's `frame_app` on your model.
+   display and the touch, then runs PRISM's `frame_app` on your model. Use
+   `boards/korvo1/app_support.hpp` for `halt`, `print_stats` and `open_touch_or_none`.
 2. Add a line for it in `main/Kconfig.projbuild` (a `config PRISM_APP_<NAME>` and a
    `default "<name>"` for `PRISM_APP_NAME`).
-3. Add `sdkconfig.<name>` with one line: `CONFIG_PRISM_APP_<NAME>=y`.
+3. Add `sdkconfig.<name>` with `CONFIG_PRISM_APP_<NAME>=y`. An app that records a profile
+   also sets `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y` (see `sdkconfig.widgets`).
 4. Add `<name>` to `apps=(...)` in `scripts/build.sh`.
 
 Then `scripts/build.sh <name>` makes `build/<name>.bin`.
