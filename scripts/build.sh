@@ -32,7 +32,7 @@ build_app() {
     local app=$1
     idf.py -B "build/$app" -DPRISM_APP="$app" build
     (cd "build/$app" && python -m esptool --chip esp32s31 merge-bin -o "../$app.bin" @flash_args)
-    echo "build/$app.bin: $(stat -c %s "build/$app.bin") bytes"
+    echo "build/$app.bin: $(wc -c < "build/$app.bin" | tr -d " ") bytes"
 }
 
 target=${1:-all}

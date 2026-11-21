@@ -5,8 +5,8 @@
 # POSIX sh on purpose: macOS ships bash 3.2.
 
 # The Korvo-1 guide does not name its USB-UART bridge chip, so match the usual ones:
-# CP210x, CH343, CH340, FTDI.
-bridges=" 10c4:ea60 1a86:55d3 1a86:7523 0403:6001 0403:6010 0403:6015 "
+# CP210x, CH343, CH340, FTDI, and Espressif's own USB serial.
+bridges=" 10c4:ea60 1a86:55d3 1a86:7523 0403:6001 0403:6010 0403:6015 303a:1001 "
 
 usage() { echo "usage: $0 <image.bin> [port]" >&2; exit 2; }
 die() { echo "$*" >&2; exit 1; }
@@ -38,11 +38,18 @@ mac_ports() {
     ls /dev/cu.usbserial* /dev/cu.wchusbserial* /dev/cu.SLAB_USBtoUART* /dev/cu.usbmodem* 2>/dev/null
 }
 
+# One WCH bridge can show as both cu.wchusbserial<N> and cu.usbserial-<N>: keep the first.
+one_per_board() {
+    awk '{ key = $0; sub(/^\/dev\/cu\.(wch)?usbserial-?/, "", key)
+           if (key == $0) key = $0
+           if (!(key in seen)) { seen[key] = 1; print } }'
+}
+
 candidate_ports() {
     if [ "${PRISM_FLASH_PORTS+x}" ]; then echo "$PRISM_FLASH_PORTS" | tr ' ' '\n' | grep .
     elif [ "$(uname)" = Darwin ]; then mac_ports
     else linux_ports
-    fi
+    fi | one_per_board
 }
 
 pick_port() {

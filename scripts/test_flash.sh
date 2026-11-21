@@ -8,7 +8,7 @@ touch "$tmp/img.bin"
 failures=0
 
 # macOS ships bash 3.2 and no newer shell: flash.sh is POSIX sh, run under the plainest sh here.
-shell=$(command -v dash || command -v sh)
+shell=${PRISM_TEST_SHELL:-$(command -v dash || command -v sh)}
 bash4_only='mapfile|readarray|declare -A|\$\{[a-z_]+(,,|\^\^)\}|\[\[ -v|&>>|\|&'
 if grep -E "$bash4_only|\[\[|=\(" "$here/flash.sh" | grep -v '^#'; then
     echo "FAIL flash.sh uses a bash-only construct"; failures=$((failures+1))
@@ -36,6 +36,14 @@ check "two boards: esptool not run" "$([ -e "$tmp/args" ] && echo ran || echo id
 
 out=$(run "/dev/ttyUSB0 /dev/ttyUSB1" "$tmp/img.bin" /dev/ttyUSB1); rc=$?
 check "explicit port wins" "$(cat "$tmp/args")" "-p /dev/ttyUSB1 "
+
+rm -f "$tmp/args"; out=$(run "/dev/cu.wchusbserial1410 /dev/cu.usbserial-1410" "$tmp/img.bin"); rc=$?
+check "macOS: one WCH bridge under two names is one board" "$(cat "$tmp/args")" "-p /dev/cu.wchusbserial1410 "
+
+rm -f "$tmp/args"; out=$(run "/dev/cu.wchusbserial1410 /dev/cu.usbserial-2020" "$tmp/img.bin"); rc=$?
+check "macOS: two different bridges are two boards" "$out" "several boards found"
+
+check "Espressif USB serial 303a:1001 is a known bridge" "$(grep '^bridges=' "$here/flash.sh")" " 303a:1001 "
 
 out=$(run "/dev/ttyUSB0" "$tmp/missing.bin"); rc=$?
 check "missing image: exit 1" "rc=$rc" "rc=1"
