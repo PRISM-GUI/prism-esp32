@@ -49,7 +49,7 @@ void dump_if_pressed(DumpOnPlay &state)
 
 std::function<void()> dump_profile_on_play()
 {
-    auto play = Button::open(BSP_BUTTON_MODE);
+    auto play = Button::open(mode_button);
     auto uart = UartStream::open();
     if (!play || !uart) {
         std::printf("profile dump unavailable (%s): the MODE button or the console UART could not be "
