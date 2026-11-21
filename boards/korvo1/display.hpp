@@ -2,8 +2,9 @@
 
 // The Korvo-1's 800x480 RGB panel as PRISM's FrameSink (prism/platform/frame_target.hpp).
 // PRISM draws ARGB8888 into one frame in PSRAM; present() converts it into the panel's RGB565
-// back buffer (the PPA, or the CPU with CONFIG_PRISM_DISPLAY_CPU_CONVERT), shows that buffer, and
-// returns once the panel has stopped reading the other one, which is then the next back buffer.
+// back buffer (the PPA, or the CPU with CONFIG_PRISM_DISPLAY_CPU_CONVERT) and hands that buffer to
+// the panel, which switches to it at its next refresh. The next present() first waits for that
+// switch: only then has the panel stopped reading the other buffer, its next target.
 // The esp_lcd RGB driver owns the two RGB565 buffers (PSRAM, 750 KB each).
 
 #include <prism/platform/frame_target.hpp>
@@ -76,6 +77,7 @@ private:
     Panel panel_;
     std::array<std::uint16_t *, 2> panel_buffers_{};
     int back_index_ = 1;  // the panel starts on buffer 0
+    bool flip_pending_ = false;  // a buffer was handed to the panel; it switches at its next refresh
     bool conversion_failed_ = false;
 };
 

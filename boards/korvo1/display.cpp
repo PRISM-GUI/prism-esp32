@@ -2,6 +2,8 @@
 
 #include "rgb565.hpp"
 
+#include <prism/profile/profile.hpp>
+
 #include "bsp/esp32_s31_korvo_1.h"
 #include "esp_attr.h"
 #include "esp_err.h"
@@ -182,15 +184,28 @@ std::expected<Display, std::string> Display::open()
 
 std::span<std::uint32_t> Display::back() { return {frame_.get(), kPixels}; }
 
+// The wait for the panel comes before writing, not after showing: the panel leaves `target` only
+// when it switches to the buffer the last present() handed it, and that wait now overlaps the
+// drawing of this frame instead of following the last one.
+//
 // simplify: if the panel's interrupt fires between the stale-signal drain and the driver arming
 // the switch (its cache write-back of the buffer included), `flipped_` is given for the old
-// buffer, and that one present() returns while the panel still reads what is now back(): one
-// torn frame. In both modes: the link-switch event without bounce buffers, the frame wrap with
-// them. Upgrade: have the interrupt report which buffer it switched to.
+// buffer, and the next present() writes into the buffer the panel still reads: one torn frame.
+// In both modes: the link-switch event without bounce buffers, the frame wrap with them.
+// Upgrade: have the interrupt report which buffer it switched to.
 void Display::present()
 {
     std::uint16_t *target = panel_buffers_[back_index_];
-    const esp_err_t converted = convert_into(target);
+    if (flip_pending_) {
+        PRISM_PROFILE_SCOPE("wait for panel");
+        xSemaphoreTake(flipped_.get(), kFlipTimeout);
+        flip_pending_ = false;
+    }
+    esp_err_t converted;
+    {
+        PRISM_PROFILE_SCOPE("convert");
+        converted = convert_into(target);
+    }
     report_first_failure(converted);
     if (converted != ESP_OK)
         return;   // the buffer was not written: keep showing the last good one
@@ -198,7 +213,7 @@ void Display::present()
     // A buffer of the panel's own: the driver only writes the cache back and switches to it.
     ESP_ERROR_CHECK_WITHOUT_ABORT(
         esp_lcd_panel_draw_bitmap(panel_.get(), 0, 0, kWidth, kHeight, target));
-    xSemaphoreTake(flipped_.get(), kFlipTimeout);
+    flip_pending_ = true;
     back_index_ ^= 1;
 }
 
