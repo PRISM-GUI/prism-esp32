@@ -6,7 +6,11 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "esp_pthread.h"
+#include "esp_timer.h"
+
 #include <cmath>
+#include <cstdio>
 #include <utility>
 
 namespace korvo1 {
@@ -21,7 +25,22 @@ constexpr float kInputGainDb = 24.f;
 
 constexpr int kReadError = 20;   // ticks to wait before retrying a failed read, so it cannot spin
 
-std::string failure(const char *what, const char *hint)
+constexpr std::int64_t kReportEveryUs = 5'000'000;
+
+// Names the next thread this one creates "mic" and, when destroyed, takes the name back so the
+// threads created later (the frame runtime's) keep their defaults. The stack stays the default.
+class MicThreadName {
+public:
+    MicThreadName()
+    {
+        esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
+        cfg.thread_name = "mic";
+        esp_pthread_set_cfg(&cfg);
+    }
+    ~MicThreadName() { esp_pthread_set_cfg(nullptr); }
+};
+
+std::string failure(const char *what, const std::string &hint)
 {
     return std::string("microphones: ") + what + ": " + hint;
 }
@@ -41,27 +60,47 @@ std::expected<std::unique_ptr<MicSource>, std::string> MicSource::open(float rat
                                        .mclk_multiple = 0};
     if (esp_codec_dev_open(codec, &format) != ESP_CODEC_DEV_OK)
         return std::unexpected(failure("the codec refused the format",
-                                       "use 16000 Hz, the rate the board's clocking supports"));
+                                       "try 16000 Hz, the rate the board's clocking supports (asked for " +
+                                           std::to_string(format.sample_rate) + " Hz)"));
     if (esp_codec_dev_set_in_gain(codec, kInputGainDb) != ESP_CODEC_DEV_OK) {
         esp_codec_dev_close(codec);
         return std::unexpected(failure("setting the input gain failed", "power-cycle the board"));
     }
-    std::unique_ptr<MicSource> source{new MicSource(codec, rate)};
+    std::unique_ptr<MicSource> source{new MicSource(codec, rate)};   // owns the codec from here: its destructor closes it
+    const MicThreadName name;
     source->thread_ = std::jthread([raw = source.get()](std::stop_token stop) { raw->run(stop); });
     return source;
 }
 
 MicSource::~MicSource()
 {
-    thread_.request_stop();
-    thread_.join();
+    if (thread_.joinable()) {
+        thread_.request_stop();
+        thread_.join();
+    }
     esp_codec_dev_close(codec_);
+}
+
+void MicSource::report_read_failure(int error)
+{
+    ++failures_;
+    const std::int64_t now = esp_timer_get_time();
+    if (failures_ == 1)
+        std::printf("microphones: reading the codec failed (esp_codec_dev error %d): check the codec's "
+                    "wiring and the I2S pins, then restart the board\n", error);
+    else if (now - last_report_us_ >= kReportEveryUs)
+        std::printf("microphones: %u reads failed so far (last error %d)\n", unsigned(failures_), error);
+    else
+        return;
+    last_report_us_ = now;
 }
 
 void MicSource::run(std::stop_token stop)
 {
     while (!stop.stop_requested()) {
-        if (esp_codec_dev_read(codec_, block_.data(), int(sizeof block_)) != ESP_CODEC_DEV_OK) {
+        if (const int error = esp_codec_dev_read(codec_, block_.data(), int(sizeof block_));
+            error != ESP_CODEC_DEV_OK) {
+            report_read_failure(error);
             vTaskDelay(kReadError);
             continue;
         }

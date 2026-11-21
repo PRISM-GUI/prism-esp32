@@ -39,12 +39,15 @@ public:
 private:
     MicSource(esp_codec_dev_handle_t codec, float rate) : codec_(codec), rate_(rate) {}
     void run(std::stop_token stop);
+    void report_read_failure(int error);   // failure path only: the first one, then one line per 5 s
 
     esp_codec_dev_handle_t codec_;
     float rate_;
     prism::dev::SpscRing<float, 4096> ring_;   // 256 ms at 16 kHz
     std::array<std::int16_t, 2 * kBlockFrames> block_{};   // allocated once: the thread never allocates
     std::array<float, kBlockFrames> mono_{};
+    std::uint32_t failures_ = 0;   // mic thread only
+    std::int64_t last_report_us_ = 0;
     std::jthread thread_;
 };
 
