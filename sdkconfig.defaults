@@ -4,8 +4,10 @@ CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
 # Boot without PSRAM too, so the self-test can say it is missing instead of IDF aborting.
 CONFIG_SPIRAM_IGNORE_NOTFOUND=y
-# A 1.5 MB app partition: the self-test alone fills 82% of the default 1 MB.
-CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+# A 3 MB app partition (partitions.csv): the self-test alone fills 82% of the default 1 MB, and
+# the scope is over the 1.5 MB of the large preset.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_320=y
 CONFIG_FREERTOS_HZ=1000

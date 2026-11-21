@@ -1,0 +1,6 @@
+# The scope firmware outgrew the 1.5 MB of the large single-app preset: 3 MB for the app (the
+# board has 16 MB of flash).
+# Name,   Type, SubType, Offset,  Size
+nvs,      data, nvs,     0x9000,  0x6000
+phy_init, data, phy,     0xf000,  0x1000
+factory,  app,  factory, 0x10000, 0x300000

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the firmwares: scripts/build.sh [selftest|widgets|all] (default: all).
+# Build the firmwares: scripts/build.sh [selftest|widgets|scope|all] (default: all).
 # Each one is build/<name>.bin, one image merged at address 0 (bootloader, partition table,
 # app): flash it with the web flasher or `esptool.py write_flash 0x0 build/<name>.bin`.
 #
@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-apps=(selftest widgets)
+apps=(selftest widgets scope)
 image=${PRISM_ESP32_IMAGE:-ghcr.io/jeandet/prism-esp32-dev:20261121}
 
 usage() { local IFS='|'; echo "usage: $0 [${apps[*]}|all]" >&2; exit 2; }
@@ -30,10 +30,6 @@ build_app() {
 }
 
 target=${1:-all}
-if [[ $target == scope ]]; then
-    echo "The scope firmware is not written yet (main/scope.cpp): build selftest or widgets." >&2
-    exit 2
-fi
 if [[ $target == all ]]; then selected=("${apps[@]}")
 elif [[ " ${apps[*]} " == *" $target "* ]]; then selected=("$target")
 else usage
