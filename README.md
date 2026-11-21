@@ -1,48 +1,158 @@
 # PRISM on the ESP32-S31-Korvo-1
 
-A port of [PRISM](https://github.com/jeandet/PRISM) to Espressif's ESP32-S31-Korvo-1 V1.1
-(2 × RISC-V at 320 MHz, 16 MB PSRAM, 16 MB flash, 800×480 RGB panel). This is a plain ESP-IDF
-project. PRISM is the subproject `subprojects/prism`, built by its own Meson build with
-ESP-IDF's compiler and flags (`components/prism/`). This repository holds only the board code.
+This repository runs [PRISM](https://github.com/jeandet/PRISM) on Espressif's
+ESP32-S31-Korvo-1 board. You can flash a demo and watch it run without installing ESP-IDF.
 
-**Status: skeleton.** One firmware so far, `selftest`: it checks PRISM's threads, builds a
-snapshot of PRISM's widget demo at 800×480, and checks the PSRAM. The display, touch, the
-microphones and the two demo apps come next (PRISM's `doc/design/esp32-port.md`).
+## The board
 
-## Get it
+The ESP32-S31-Korvo-1 V1.1 is a development board with:
 
-    git clone https://github.com/jeandet/prism-esp32
+- two RISC-V cores at 320 MHz,
+- 16 MB of flash and 16 MB of PSRAM,
+- an 800x480 touch screen (RGB panel, GT1151 touch controller),
+- two microphones on an ES8389 audio codec,
+- four buttons: SET, MODE, VOLP and VOLM.
+
+It has two USB-C ports. Use the one marked UART. The other one only powers the board.
+
+## The three images
+
+Each image is one file, written at address 0. You can pick one of three.
+
+| Image | What it does |
+|---|---|
+| `selftest.bin` | Checks PRISM's threads, the PSRAM and the clocks. Prints the result on the console. No screen needed. |
+| `widgets.bin` | PRISM's widget demo: a counter, a checkbox and a slider. Touch it. |
+| `scope.bin` | A scope on the board's microphones: the signal on the left, its spectrum on the right. |
+
+Where to get them:
+
+- A GitHub release has all three (tags `v*`).
+- Every CI run keeps them as the `firmware` artifact.
+- Or build them yourself (see "Build it yourself").
+
+## Flash from the browser
+
+Nothing to install. It works on macOS, Linux and Windows, in Chrome or Edge.
+
+1. Plug the board in by its UART USB-C port.
+2. Open [Espressif's web flasher](https://espressif.github.io/esp-launchpad/).
+3. Connect to the board.
+4. Choose the image and set the address to `0x0`.
+5. Flash it, then press the reset button.
+
+## Flash with `flash.sh`
+
+You need `esptool` (`pip install esptool`). If it is missing, the script tells you.
+
+    scripts/flash.sh widgets.bin
+
+The script finds the board's serial port by itself. It runs:
+
+    esptool.py --chip esp32s31 -p <port> -b 921600 write_flash 0x0 widgets.bin
+
+If it finds two boards, it lists them. Run it again with the port you want:
+
+    scripts/flash.sh widgets.bin /dev/ttyUSB1
+
+If it finds none, it asks whether the UART USB-C port is plugged in.
+
+How it finds the port:
+
+- On Linux it looks at `/dev/ttyUSB*` and `/dev/ttyACM*`. It keeps those whose USB bridge is
+  a common one (CP210x 10c4:ea60, CH343 1a86:55d3, CH340 1a86:7523, FTDI 0403:6001, 6010 and
+  6015). Espressif does not say which chip the Korvo-1 uses, so this is a list, not a
+  single match. If your board is not found, pass the port yourself.
+- On macOS it lists `/dev/cu.usbserial*`, `cu.wchusbserial*`, `cu.SLAB_USBtoUART*` and
+  `cu.usbmodem*`.
+- You may need to be in the `dialout` group on Linux.
+
+`scripts/test_flash.sh` checks the script against a fake `esptool`.
+
+## The console at 921600
+
+The board prints on its UART at **921600** baud, for everything. Open any serial terminal:
+
+    picocom -b 921600 /dev/ttyUSB0
+
+Press reset. The first line or two may be garbage. That is the chip's ROM bootloader, which
+speaks at 115200.
+
+What you should see:
+
+- `selftest`: one line per check, each ending in `PASS`:
+
+      PRISM self-test on the ESP32-S31-Korvo-1
+      std::thread join PASS
+      snapshot built: N draw commands PASS
+      PSRAM: 16 MB PASS
+      allocation count: new +1 PASS
+      system counters: heap reported, idle grows over 100 ms PASS
+      profile clock: 1000000 ticks per second PASS
+
+  It ends with `failures: 0`. A `FAIL` line comes with a hint.
+- `widgets` and `scope`: a timing line once a second (update, snapshot, draw and present
+  times, and the CPU load).
+
+If something is wrong, the line says what to do next. For example
+`no PSRAM found: is this a WROOM-3 module?`.
+
+## Take a trace
+
+`widgets` and `scope` record where the time goes. The recorder lives in PSRAM.
+
+1. Flash `widgets.bin` or `scope.bin`. Open no terminal on the port.
+2. Start `prism-trace` on the port. Build it from PRISM (`tools/prism-trace/`).
+
+       prism-trace /dev/ttyUSB0 -o trace.json --baud 921600
+
+3. Let the demo run for 15 seconds.
+4. Press the **MODE** button. The screen freezes for a few seconds while the dump drains.
+5. The console says `profile: dump done (N bytes)`.
+
+`prism-trace` prints a summary. It should say `1000000 ticks/s` and `0 warning(s)`.
+Open `trace.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
+
+## Build it yourself
+
+Docker or Podman is all you need.
+
+    git clone --recursive https://github.com/jeandet/prism-esp32
     cd prism-esp32
-    git submodule update --init
+    scripts/build.sh            # selftest, widgets and scope
+    scripts/build.sh widgets    # just one
 
-A fresh clone needs PRISM's `main` to carry the `freertos_port` option and
-`examples/embedded/` (`prism_embedded_apps_dep`). Until those PRISM commits are pushed, build
-against a local PRISM checkout: `ln -sfn <your PRISM checkout> subprojects/prism`.
+The images are `build/selftest.bin`, `build/widgets.bin` and `build/scope.bin`.
 
-## Build
-
-    scripts/build.sh selftest      # -> build/selftest.bin (or: scripts/build.sh all)
-
-With ESP-IDF in your shell (`IDF_PATH` set), the script runs `idf.py` directly. Otherwise it
-runs in the build image (`docker/Dockerfile`, ESP-IDF at the pinned commit) with Podman or
-Docker. Build the image once:
+The script runs in the build image, `ghcr.io/jeandet/prism-esp32-dev`. It has ESP-IDF at
+the pinned commit. To build the image yourself:
 
     podman build -f docker/Dockerfile -t ghcr.io/jeandet/prism-esp32-dev:20261121 .
 
-The container sees only this directory: `subprojects/prism` must be the submodule there, not
-a symlink to a checkout elsewhere.
+If you already have ESP-IDF in your shell (`IDF_PATH` set), the script runs `idf.py` directly.
+In that case you also need Meson 1.5 or newer.
 
-You need Meson (>= 1.5) next to ESP-IDF when you build without the image. Developers with
-ESP-IDF can also run `idf.py -B build/selftest -DPRISM_APP=selftest build` directly.
+Flash from the host, not from the container. USB does not reach a container on macOS.
 
-On the lab's Coder workspace: `scripts/remote.sh 'scripts/build.sh selftest'`.
+PRISM is the git submodule `subprojects/prism`. The container sees only this directory, so
+it must be the submodule, not a symlink to a checkout elsewhere.
 
-## Flash and read the console
+## Add an app
 
-Each `build/<name>.bin` is one image written at address 0:
+An app is a model and a view, as on the desktop. This repository only holds the board.
 
-    esptool.py write_flash 0x0 build/selftest.bin
+1. Write `main/<name>.cpp` with an `app_main()`. Copy `main/widgets.cpp`: it opens the
+   display and the touch, then runs PRISM's `frame_app` on your model.
+2. Add a line for it in `main/Kconfig.projbuild` (a `config PRISM_APP_<NAME>` and a
+   `default "<name>"` for `PRISM_APP_NAME`).
+3. Add `sdkconfig.<name>` with one line: `CONFIG_PRISM_APP_<NAME>=y`.
+4. Add `<name>` to `apps=(...)` in `scripts/build.sh`.
 
-or use Espressif's web flasher. Open a serial terminal at **921600** baud on the board's
-USB-UART port and press reset. The self-test prints one line per check, ending in PASS or
-FAIL, then `failures: 0`.
+Then `scripts/build.sh <name>` makes `build/<name>.bin`.
+
+## Screenshots
+
+Put them in `docs/` and link them here.
+
+- `docs/widgets.jpg`: the widgets demo on the panel.
+- `docs/scope.jpg`: the scope, with the spectrum of a whistle.

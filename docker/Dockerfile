@@ -10,7 +10,7 @@ ARG BASE=registry.fedoraproject.org/fedora:44
 FROM ${BASE}
 USER root
 RUN dnf install -y --setopt=install_weak_deps=False \
-        git wget flex bison gperf python3 python3-pip cmake ninja-build ccache \
+        git wget tar xz unzip flex bison gperf python3 python3-pip cmake ninja-build ccache \
         libffi-devel openssl-devel libusb1 dfu-util meson which \
     && dnf clean all
 
