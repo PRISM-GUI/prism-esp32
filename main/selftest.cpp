@@ -28,10 +28,12 @@ namespace {
 
 int failures = 0;
 
-void check(const char *line, bool ok)
+void check(const char *line, bool ok, const char *hint = nullptr)
 {
     std::printf("%s %s\n", line, ok ? "PASS" : "FAIL");
-    if (!ok) ++failures;
+    if (ok) return;
+    ++failures;
+    if (hint) std::printf("  %s\n", hint);
 }
 
 std::size_t command_count(const prism::render::SceneSnapshot &snap)
@@ -46,7 +48,7 @@ void check_thread_join()
     std::atomic<bool> ran{false};
     std::thread worker([&] { ran = true; });
     worker.join();
-    check("std::thread join", ran.load());
+    check("std::thread join", ran.load(), "CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT too small, or no pthread component linked?");
 }
 
 void check_snapshot()
@@ -59,7 +61,7 @@ void check_snapshot()
     const std::size_t n = snap ? command_count(*snap) : 0;
     char line[64];
     std::snprintf(line, sizeof line, "snapshot built: %zu draw commands", n);
-    check(line, n > 0);
+    check(line, n > 0, "the widget demo built nothing: check the main task stack (CONFIG_ESP_MAIN_TASK_STACK_SIZE) and the heap");
 }
 
 void check_psram()
@@ -84,7 +86,8 @@ void check_allocation_count()
     asm volatile("" : : "r"(p) : "memory");   // the optimiser may not drop the new
     const auto after = prism::platform::allocation_count();
     delete p;
-    check("allocation count: new +1", after - before == 1);
+    check("allocation count: new +1", after - before == 1,
+          "is CONFIG_HEAP_USE_HOOKS on, and esp_heap_trace_alloc_hook linked from boards/korvo1?");
 }
 
 void check_system_counters()
@@ -95,9 +98,11 @@ void check_system_counters()
     const bool ok = a && b && a->heap_used > 0 && a->heap_total >= a->heap_used
                     && a->stacks_total >= a->stacks_used && a->stacks_used > 0
                     && b->idle_us > a->idle_us;
-    check("system counters: heap reported, idle grows over 100 ms", ok);
+    check("system counters: heap reported, idle grows over 100 ms", ok,
+          "enable CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS; no heap figures means system_counters() is a stub");
     check("system counters: idle grows by at most 110 ms over 100 ms",
-          a && b && b->idle_us - a->idle_us <= 110'000);
+          a && b && b->idle_us - a->idle_us <= 110'000,
+          "idle_us must be the mean over cores, in microseconds (CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER)");
 }
 
 // The tick rate times the time a 100 ms delay took must come out near 100 ms.
@@ -110,7 +115,8 @@ void check_profile_clock_rate()
     char line[64];
     std::snprintf(line, sizeof line, "profile clock: %llu ticks per second",
                   static_cast<unsigned long long>(tps));
-    check(line, tps >= 1'000'000 && ms >= 99 && ms <= 120);
+    check(line, tps >= 1'000'000 && ms >= 99 && ms <= 120,
+          "esp_timer not running, or profile_ticks_per_second() does not match profile_ticks()?");
 }
 
 bool never_goes_back(int reads)
@@ -135,7 +141,8 @@ void check_profile_clock_monotonic()
     for (auto &t : readers) t.join();
     bool all = true;
     for (const auto &o : ok) all = all && o.load();
-    check("profile clock never goes back over 1e6 reads", all);
+    check("profile clock never goes back over 1e6 reads", all,
+          "a per-core counter: use one clock both cores read (esp_timer_get_time)");
 }
 
 } // namespace
