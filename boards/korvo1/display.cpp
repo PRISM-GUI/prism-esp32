@@ -15,6 +15,7 @@
 #include "sdkconfig.h"
 
 #include <algorithm>
+#include <thread>
 
 extern "C" esp_lcd_rgb_timing_t korvo1_bsp_panel_timing(void); // bsp_timing.c
 
@@ -121,6 +122,41 @@ ppa_srm_oper_config_t srm_config(const std::uint32_t *frame, std::uint16_t *pane
     return config;
 }
 
+ppa_fill_oper_config_t fill_config(std::uint32_t *frame, std::uint32_t argb)
+{
+    ppa_fill_oper_config_t config{};
+    config.out.buffer = frame;
+    config.out.buffer_size = kPixels * sizeof(std::uint32_t);
+    config.out.pic_w = Display::kWidth;
+    config.out.pic_h = Display::kHeight;
+    config.out.fill_cm = PPA_FILL_COLOR_MODE_ARGB8888;
+    config.fill_block_w = Display::kWidth;
+    config.fill_block_h = Display::kHeight;
+    config.fill_color_val = argb;
+    config.mode = PPA_TRANS_MODE_BLOCKING;
+    return config;
+}
+
+std::uint32_t *alloc_frame()
+{
+    // The DMA capability makes the heap align to the cache line, as the PPA reads it by DMA.
+    auto *frame = static_cast<std::uint32_t *>(heap_caps_aligned_alloc(
+        CONFIG_CACHE_L1_DCACHE_LINE_SIZE, kPixels * sizeof(std::uint32_t),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA));
+    if (frame)
+        std::fill_n(frame, kPixels, 0xFF000000u);
+    return frame;
+}
+
+ppa_client_handle_t ppa_client(ppa_operation_t operation)
+{
+    ppa_client_config_t config{};
+    config.oper_type = operation;
+    config.max_pending_trans_num = 1;
+    ppa_client_handle_t client = nullptr;
+    return ppa_register_client(&config, &client) == ESP_OK ? client : nullptr;
+}
+
 } // namespace
 
 void display_detail::HeapFree::operator()(std::uint32_t *p) const { heap_caps_free(p); }
@@ -134,29 +170,26 @@ std::expected<Display, std::string> Display::open()
         return std::unexpected(std::string("no PSRAM found: is this a WROOM-3 module? The display "
                                            "needs 3 MB of PSRAM"));
     Display display;
-    // The DMA capability makes the heap align to the cache line, as the PPA reads it by DMA.
-    display.frame_.reset(static_cast<std::uint32_t *>(heap_caps_aligned_alloc(
-        CONFIG_CACHE_L1_DCACHE_LINE_SIZE, kPixels * sizeof(std::uint32_t),
-        MALLOC_CAP_SPIRAM | MALLOC_CAP_DMA)));
-    if (!display.frame_)
-        return std::unexpected(std::string("no room in PSRAM for the 1.5 MB frame: is the "
-                                           "module's PSRAM 16 MB?"));
-    std::fill_n(display.frame_.get(), kPixels, 0xFF000000u);
+    for (Frame &frame : display.frames_) {
+        frame.reset(alloc_frame());
+        if (!frame)
+            return std::unexpected(std::string("no room in PSRAM for the two 1.5 MB frames: is "
+                                               "the module's PSRAM 16 MB?"));
+    }
 
     display.flipped_.reset(xSemaphoreCreateBinary());
-    if (!display.flipped_)
-        return std::unexpected(std::string("no memory for the display's semaphore"));
+    display.converted_.reset(xSemaphoreCreateCounting(2, 0));
+    display.to_show_.reset(xQueueCreate(1, sizeof(int)));
+    if (!display.flipped_ || !display.converted_ || !display.to_show_)
+        return std::unexpected(std::string("no memory for the display's semaphores"));
 
     if (!kCpuConvert) {
-        ppa_client_config_t ppa_config{};
-        ppa_config.oper_type = PPA_OPERATION_SRM;
-        ppa_config.max_pending_trans_num = 1;
-        ppa_client_handle_t ppa = nullptr;
-        if (const esp_err_t err = ppa_register_client(&ppa_config, &ppa); err != ESP_OK)
-            return std::unexpected(failure("PPA client registration failed", err,
-                                           "build with CONFIG_PRISM_DISPLAY_CPU_CONVERT=y to "
-                                           "convert on the CPU instead"));
-        display.ppa_.reset(ppa);
+        display.ppa_.reset(ppa_client(PPA_OPERATION_SRM));
+        if (!display.ppa_)
+            return std::unexpected(std::string("PPA client registration failed: build with "
+                                               "CONFIG_PRISM_DISPLAY_CPU_CONVERT=y to convert "
+                                               "on the CPU instead"));
+        display.filler_.reset(ppa_client(PPA_OPERATION_FILL));   // none: the CPU clears
     }
 
     const esp_lcd_rgb_panel_config_t config = panel_config();
@@ -172,7 +205,8 @@ std::expected<Display, std::string> Display::open()
     display.panel_buffers_ = panel_buffers(panel);
 
     // One conversion now, so a PPA that refuses this frame says so here rather than every frame.
-    if (const esp_err_t err = display.convert_into(display.panel_buffers_[1]); err != ESP_OK)
+    if (const esp_err_t err = display.convert_into(display.frames_[0].get(), display.panel_buffers_[1]);
+        err != ESP_OK)
         return std::unexpected(failure("frame conversion failed", err,
                                        "build with CONFIG_PRISM_DISPLAY_CPU_CONVERT=y to convert "
                                        "on the CPU instead"));
@@ -182,18 +216,57 @@ std::expected<Display, std::string> Display::open()
     return display;
 }
 
-std::span<std::uint32_t> Display::back() { return {frame_.get(), kPixels}; }
+std::span<std::uint32_t> Display::back() { return {frames_[draw_].get(), kPixels}; }
+
+bool Display::clear(std::uint32_t argb)
+{
+    if (!filler_)
+        return false;
+    const ppa_fill_oper_config_t config = fill_config(frames_[draw_].get(), argb);
+    return ppa_do_fill(filler_.get(), &config) == ESP_OK;   // failed: the CPU clears
+}
+
+// Hands the frame to the present task and returns: the task converts it while the render thread
+// draws the next one, into the other frame, once that one's conversion is over.
+//
+// simplify: the present task runs for as long as the board does; a Display is never destroyed
+// once it has shown a frame (frame_app does not return on this board). Upgrade, if one is ever
+// torn down: a stop message on `to_show_`, and a join.
+void Display::present()
+{
+    if (!presenter_started_) {
+        std::thread([this] { present_loop(); }).detach();
+        presenter_started_ = true;
+    }
+    xQueueSend(to_show_.get(), &draw_, portMAX_DELAY);
+    draw_ ^= 1;
+    if (frames_in_flight_ == 0) {
+        frames_in_flight_ = 1;   // the first frame: the other one was never handed over
+        return;
+    }
+    PRISM_PROFILE_SCOPE("wait for convert");
+    xSemaphoreTake(converted_.get(), portMAX_DELAY);
+}
+
+void Display::present_loop()
+{
+    prism::profile::name_thread("present");
+    for (;;) {
+        int frame = 0;
+        xQueueReceive(to_show_.get(), &frame, portMAX_DELAY);
+        show(frames_[frame].get());
+    }
+}
 
 // The wait for the panel comes before writing, not after showing: the panel leaves `target` only
-// when it switches to the buffer the last present() handed it, and that wait now overlaps the
-// drawing of this frame instead of following the last one.
+// when it switches to the buffer the last show() handed it.
 //
 // simplify: if the panel's interrupt fires between the stale-signal drain and the driver arming
 // the switch (its cache write-back of the buffer included), `flipped_` is given for the old
-// buffer, and the next present() writes into the buffer the panel still reads: one torn frame.
+// buffer, and the next show() writes into the buffer the panel still reads: one torn frame.
 // In both modes: the link-switch event without bounce buffers, the frame wrap with them.
 // Upgrade: have the interrupt report which buffer it switched to.
-void Display::present()
+void Display::show(const std::uint32_t *frame)
 {
     std::uint16_t *target = panel_buffers_[back_index_];
     if (flip_pending_) {
@@ -204,8 +277,9 @@ void Display::present()
     esp_err_t converted;
     {
         PRISM_PROFILE_SCOPE("convert");
-        converted = convert_into(target);
+        converted = convert_into(frame, target);
     }
+    xSemaphoreGive(converted_.get());   // the render thread may draw into `frame` again
     report_first_failure(converted);
     if (converted != ESP_OK)
         return;   // the buffer was not written: keep showing the last good one
@@ -229,13 +303,13 @@ void Display::report_first_failure(esp_err_t err)
                  .c_str());
 }
 
-esp_err_t Display::convert_into(std::uint16_t *panel_buffer)
+esp_err_t Display::convert_into(const std::uint32_t *frame, std::uint16_t *panel_buffer)
 {
     if constexpr (kCpuConvert) {
-        argb8888_to_rgb565({frame_.get(), kPixels}, {panel_buffer, kPixels});
+        argb8888_to_rgb565({frame, kPixels}, {panel_buffer, kPixels});
         return ESP_OK;
     } else {
-        const ppa_srm_oper_config_t config = srm_config(frame_.get(), panel_buffer);
+        const ppa_srm_oper_config_t config = srm_config(frame, panel_buffer);
         return ppa_do_scale_rotate_mirror(ppa_.get(), &config);
     }
 }
