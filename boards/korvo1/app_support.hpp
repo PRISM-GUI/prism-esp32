@@ -5,6 +5,8 @@
 
 #include "touch.hpp"
 
+#include <prism/platform/frame_app.hpp>
+
 #include <string>
 #include <string_view>
 
@@ -17,5 +19,9 @@ void print_stats(std::string_view line);
 
 // The touch controller, or a Touch that never sees a finger (the reason is printed).
 Touch open_touch_or_none();
+
+// Logic on core 0, render on core 1. Core 1 is the SIMD core, per Espressif's forum: unconfirmed,
+// main/selftest.cpp checks it.
+prism::platform::FrameOptions pinned_threads();
 
 } // namespace korvo1

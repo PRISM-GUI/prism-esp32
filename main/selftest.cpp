@@ -20,6 +20,8 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_cpu.h"
+#include "esp_pthread.h"
 
 #include "sdkconfig.h"
 #if CONFIG_SPIRAM
@@ -65,6 +67,25 @@ void check_thread_join()
     std::thread worker([&] { ran = true; });
     worker.join();
     check("std::thread join", ran.load(), "CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT too small, or no pthread component linked?");
+}
+
+int core_running_vector_instruction()
+{
+    asm volatile("esp.zero.q q0");
+    return esp_cpu_get_core_id();
+}
+
+void check_simd_core()
+{
+    constexpr int kSimdCore = 1;
+    std::atomic<int> core{-1};
+    auto cfg = esp_pthread_get_default_config();
+    cfg.pin_to_core = kSimdCore;
+    esp_pthread_set_cfg(&cfg);
+    std::thread worker([&] { core = core_running_vector_instruction(); });
+    worker.join();
+    check("SIMD on core 1", core.load() == kSimdCore,
+          "the SIMD core is core 0 on this chip: swap the pins in pinned_threads()");
 }
 
 void check_snapshot()
@@ -167,6 +188,7 @@ extern "C" void app_main(void)
 {
     say("PRISM self-test on the ESP32-S31-Korvo-1\n");
     check_thread_join();
+    check_simd_core();
     check_snapshot();
     check_psram();
     check_allocation_count();
