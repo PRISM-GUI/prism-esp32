@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs the compiler given first without -pthread. Meson's threads dependency adds it, and the
+# ESP-IDF GCC rejects it (pthreads are an ESP-IDF component, linked by ESP-IDF).
+compiler="$1"
+shift
+for arg in "$@"; do
+    shift
+    [ "$arg" = "-pthread" ] || set -- "$@" "$arg"
+done
+exec "$compiler" "$@"

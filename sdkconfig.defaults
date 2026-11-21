@@ -1,0 +1,21 @@
+# The ESP32-S31-Korvo-1: 16 MB flash, 16 MB PSRAM (WROOM-3 module).
+CONFIG_IDF_TARGET="esp32s31"
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_SPIRAM=y
+# A 1.5 MB app partition: the self-test alone fills 82% of the default 1 MB.
+CONFIG_PARTITION_TABLE_SINGLE_APP_LARGE=y
+
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_320=y
+CONFIG_FREERTOS_HZ=1000
+
+# PRISM is compiled as on every other target: exceptions on, and RTTI (std::any::type()).
+CONFIG_COMPILER_CXX_EXCEPTIONS=y
+CONFIG_COMPILER_CXX_RTTI=y
+
+# One speed for the logs and the profiler dump.
+CONFIG_ESP_CONSOLE_UART_CUSTOM=y
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=921600
+
+# app_main builds a whole snapshot of an 800x480 view.
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=32768
+CONFIG_PTHREAD_TASK_STACK_SIZE_DEFAULT=16384
