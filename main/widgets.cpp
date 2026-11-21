@@ -2,7 +2,7 @@
 // (a logic and a render thread), the timing line on the panel and on the console.
 
 #include "app_support.hpp"
-#include "display.hpp"
+#include "band_display.hpp"
 #include "profile_dump.hpp"
 #include "touch.hpp"
 
@@ -11,7 +11,7 @@
 
 extern "C" void app_main()
 {
-    auto display = korvo1::Display::open();
+    auto display = korvo1::BandDisplay::open();
     if (!display)
         korvo1::halt(display.error());
     korvo1::Touch input = korvo1::open_touch_or_none();

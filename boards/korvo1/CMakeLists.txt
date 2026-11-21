@@ -1,8 +1,8 @@
 # The Korvo-1 port: the hooks PRISM's runtime leaves to the board (allocation count and guard,
-# system counters, the profile clock), and the panel and touch as PRISM's FrameSink and
+# system counters, the profile clock), and the panel and touch as PRISM's BandSink and
 # TouchSource, and the microphones as the scope's SampleSource. main requires it.
 idf_component_register(
-    SRCS app_support.cpp port.cpp profile_clock.cpp display.cpp touch.cpp mic_source.cpp bsp_timing.c
+    SRCS app_support.cpp port.cpp profile_clock.cpp band_display.cpp touch.cpp mic_source.cpp bsp_timing.c
          uart_stream.cpp buttons.cpp profile_dump.cpp
     INCLUDE_DIRS .
     LDFRAGMENTS linker.lf

@@ -145,10 +145,17 @@ The page's summary should say `1000000 ticks/s` and `0 warning(s)`.
 `prism-trace` prints a summary. It should say `1000000 ticks/s` and `0 warning(s)`.
 Open `trace.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
 
+## Speed
+
+PRISM draws each frame in bands of 48 rows. A band lives in the chip's internal SRAM, which is
+fast, not in PSRAM. It is drawn directly in RGB565, the panel's own format, so there is no
+conversion. The PPA copies each finished band into the panel's buffer while PRISM draws the
+next one.
+
 ## Troubleshooting
 
 - The board boots, then aborts with `Failed to init external RAM`: this board has no PSRAM.
-  `widgets.bin` and `scope.bin` cannot run on it (the screen needs 3 MB of PSRAM). Flash
+  `widgets.bin` and `scope.bin` cannot run on it (the screen needs 1.5 MB of PSRAM). Flash
   `selftest.bin` to check: it boots without PSRAM and says `no PSRAM found`.
 - Garbage on the console: the baud rate is not 921600 (the ROM bootloader's first line is
   always garbage, at 115200).

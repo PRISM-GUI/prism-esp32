@@ -2,7 +2,7 @@
 // (a waveform and a spectrum), the synthetic sweep when the microphones do not start.
 
 #include "app_support.hpp"
-#include "display.hpp"
+#include "band_display.hpp"
 #include "profile_dump.hpp"
 #include "mic_source.hpp"
 #include "touch.hpp"
@@ -30,7 +30,7 @@ prism_examples::SampleSource &scope_source()
 
 extern "C" void app_main()
 {
-    auto display = korvo1::Display::open();
+    auto display = korvo1::BandDisplay::open();
     if (!display)
         korvo1::halt(display.error());
     korvo1::Touch input = korvo1::open_touch_or_none();

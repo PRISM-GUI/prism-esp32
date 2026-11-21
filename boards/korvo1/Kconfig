@@ -9,11 +9,11 @@ menu "PRISM on the Korvo-1"
             (BSP_DISPLAY_PANEL_RGB_TIMING). Lower it if the picture shifts: the panel then reads
             less from PSRAM per second, at a lower refresh rate.
 
-    config PRISM_DISPLAY_CPU_CONVERT
-        bool "Convert the frame to RGB565 on the CPU instead of the PPA"
+    config PRISM_DISPLAY_CPU_COPY
+        bool "Copy the bands into the panel buffer on the CPU instead of the PPA"
         default n
         help
-            The fallback if the PPA misbehaves: present() converts PRISM's ARGB8888 frame into
-            the panel's RGB565 buffer on the CPU, which is slower.
+            The fallback if the PPA misbehaves: each band PRISM draws is copied into the panel's
+            buffer by the CPU, which then cannot draw the next band meanwhile.
 
 endmenu
