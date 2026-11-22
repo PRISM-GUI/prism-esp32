@@ -20,6 +20,7 @@
 #include <esp_timer.h>
 #include <nvs_flash.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdio>
@@ -36,10 +37,18 @@ constexpr float tone_hz = 440.0f;
 constexpr float sample_rate_hz = 44100.0f;
 
 std::atomic<State> state{State::scanning};
-std::atomic<unsigned> underruns{0};
+std::atomic<unsigned> late_callbacks{0};
 esp_bd_addr_t peer_address{};
 esp_a2d_conn_hdl_t connection_handle = ESP_A2D_INVALID_CONN_HDL;
 bool peer_found = false;
+
+void check(const char *call, esp_err_t err)
+{
+    if (err != ESP_OK)
+        std::printf("btspike: %s failed: %s\n", call, esp_err_to_name(err));
+}
+
+#define CHECK(call) check(#call, call)
 
 const char *state_name(State s)
 {
@@ -51,29 +60,37 @@ void start_discovery()
 {
     peer_found = false;
     state = State::scanning;
-    esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0);
+    CHECK(esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0));
 }
 
-std::string_view name_of(const esp_bt_gap_cb_param_t::disc_res_param &found)
+std::string_view eir_name(uint8_t *eir)
 {
-    for (int i = 0; i < found.num_prop; ++i) {
-        const auto &p = found.prop[i];
-        if (p.type != ESP_BT_GAP_DEV_PROP_EIR)
-            continue;
-        uint8_t length = 0;
-        auto *eir = static_cast<uint8_t *>(p.val);
-        auto *name = esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_CMPL_LOCAL_NAME, &length);
-        if (!name)
-            name = esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_SHORT_LOCAL_NAME, &length);
-        if (name)
-            return {reinterpret_cast<const char *>(name), length};
-    }
+    uint8_t length = 0;
+    auto *name = esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_CMPL_LOCAL_NAME, &length);
+    if (!name)
+        name = esp_bt_gap_resolve_eir_data(eir, ESP_BT_EIR_TYPE_SHORT_LOCAL_NAME, &length);
+    return name ? std::string_view{reinterpret_cast<const char *>(name), length} : std::string_view{};
+}
+
+std::string_view property_name(const esp_bt_gap_dev_prop_t &p)
+{
+    if (p.type == ESP_BT_GAP_DEV_PROP_EIR)
+        return eir_name(static_cast<uint8_t *>(p.val));
+    if (p.type == ESP_BT_GAP_DEV_PROP_BDNAME)
+        return {static_cast<const char *>(p.val), static_cast<size_t>(p.len)};
     return {};
+}
+
+bool is_target(const esp_bt_gap_cb_param_t::disc_res_param &found)
+{
+    return std::any_of(found.prop, found.prop + found.num_prop, [](const auto &p) {
+        return property_name(p).find(target_name) != std::string_view::npos;
+    });
 }
 
 void on_device_found(const esp_bt_gap_cb_param_t::disc_res_param &found)
 {
-    if (name_of(found).find(target_name) == std::string_view::npos)
+    if (!is_target(found))
         return;
     std::memcpy(peer_address, found.bda, ESP_BD_ADDR_LEN);
     peer_found = true;
@@ -85,7 +102,7 @@ void on_discovery_stopped()
     if (!peer_found)
         return start_discovery();
     state = State::connecting;
-    esp_a2d_source_connect(peer_address);
+    CHECK(esp_a2d_source_connect(peer_address));
 }
 
 void gap_callback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t *param)
@@ -111,7 +128,7 @@ void on_connection_state(const esp_a2d_cb_param_t::a2d_conn_stat_param &connecti
 {
     if (connection.state == ESP_A2D_CONNECTION_STATE_CONNECTED) {
         connection_handle = connection.conn_hdl;
-        esp_a2d_media_ctrl_by_handle(connection_handle, ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY);
+        CHECK(esp_a2d_media_ctrl_by_handle(connection_handle, ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY));
     }
     else if (connection.state == ESP_A2D_CONNECTION_STATE_DISCONNECTED)
         start_discovery();
@@ -120,7 +137,7 @@ void on_connection_state(const esp_a2d_cb_param_t::a2d_conn_stat_param &connecti
 void on_media_ack(const esp_a2d_cb_param_t::media_ctrl_stat_param &ack)
 {
     if (ack.cmd == ESP_A2D_MEDIA_CTRL_CHECK_SRC_RDY && ack.status == ESP_A2D_MEDIA_CTRL_ACK_SUCCESS)
-        esp_a2d_media_ctrl_by_handle(connection_handle, ESP_A2D_MEDIA_CTRL_START);
+        CHECK(esp_a2d_media_ctrl_by_handle(connection_handle, ESP_A2D_MEDIA_CTRL_START));
 }
 
 void a2d_callback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
@@ -141,20 +158,34 @@ void a2d_callback(esp_a2d_cb_event_t event, esp_a2d_cb_param_t *param)
     }
 }
 
-// Interleaved 16-bit stereo, the same sample on both sides.
+constexpr float two_pi = 2.0f * std::numbers::pi_v<float>;
+constexpr int64_t bytes_per_frame = 4;
+
+// A callback later than twice the time the previous buffer lasts means the stream may have starved.
+void count_if_late(int32_t length)
+{
+    static int64_t last_us = 0;
+    static int64_t last_interval_us = 0;
+    const int64_t now = esp_timer_get_time();
+    if (last_interval_us && now - last_us > 2 * last_interval_us)
+        ++late_callbacks;
+    last_us = now;
+    last_interval_us = length / bytes_per_frame * 1'000'000 / static_cast<int64_t>(sample_rate_hz);
+}
+
+// Interleaved 16-bit stereo, the same sample on both sides. A null buffer means the stream stops.
 int32_t tone_callback(uint8_t *data, int32_t length)
 {
     static float phase = 0.0f;
-    if (!data || length <= 0) {
-        ++underruns;
+    if (!data || length <= 0)
         return 0;
-    }
+    count_if_late(length);
     auto *frames = reinterpret_cast<int16_t *>(data);
-    for (int32_t i = 0; i < length / 4; ++i) {
-        const auto sample = static_cast<int16_t>(8000.0f * std::sin(phase));
-        frames[2 * i] = frames[2 * i + 1] = sample;
-        phase = std::fmod(phase + 2.0f * std::numbers::pi_v<float> * tone_hz / sample_rate_hz,
-                          2.0f * std::numbers::pi_v<float>);
+    for (int32_t i = 0; i < length / bytes_per_frame; ++i) {
+        frames[2 * i] = frames[2 * i + 1] = static_cast<int16_t>(8000.0f * std::sin(phase));
+        phase += two_pi * tone_hz / sample_rate_hz;
+        if (phase >= two_pi)
+            phase -= two_pi;
     }
     return length & ~3;
 }
@@ -166,9 +197,10 @@ void init_flash()
 {
     auto err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        nvs_flash_erase();
-        nvs_flash_init();
+        CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
     }
+    check("nvs_flash_init", err);
 }
 
 // IDF's default-config macro is a C initializer that leaves fields out: C++ warns, -Werror stops.
@@ -176,37 +208,37 @@ void init_flash()
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 void start_bluedroid()
 {
-    esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+    CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_BLE));
     esp_bt_controller_config_t controller = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    esp_bt_controller_init(&controller);
-    esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT);
+    CHECK(esp_bt_controller_init(&controller));
+    CHECK(esp_bt_controller_enable(ESP_BT_MODE_CLASSIC_BT));
     esp_bluedroid_config_t bluedroid = BT_BLUEDROID_INIT_CONFIG_DEFAULT();
-    esp_bluedroid_init_with_cfg(&bluedroid);
-    esp_bluedroid_enable();
+    CHECK(esp_bluedroid_init_with_cfg(&bluedroid));
+    CHECK(esp_bluedroid_enable());
 }
 #pragma GCC diagnostic pop
 
 void start_profiles()
 {
     esp_bt_gap_set_device_name("PRISM_BTSPIKE");
-    esp_bt_gap_register_callback(gap_callback);
-    esp_avrc_ct_init();
-    esp_avrc_ct_register_callback(ignore_avrc_ct);
-    esp_avrc_tg_init();
-    esp_avrc_tg_register_callback(ignore_avrc_tg);
-    esp_a2d_source_init();
-    esp_a2d_register_callback(a2d_callback);
-    esp_a2d_source_register_data_callback(tone_callback);
-    esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
+    CHECK(esp_bt_gap_register_callback(gap_callback));
+    CHECK(esp_avrc_ct_init());
+    CHECK(esp_avrc_ct_register_callback(ignore_avrc_ct));
+    CHECK(esp_avrc_tg_init());
+    CHECK(esp_avrc_tg_register_callback(ignore_avrc_tg));
+    CHECK(esp_a2d_source_init());
+    CHECK(esp_a2d_register_callback(a2d_callback));
+    CHECK(esp_a2d_source_register_data_callback(tone_callback));
+    CHECK(esp_bt_gap_set_scan_mode(ESP_BT_NON_CONNECTABLE, ESP_BT_NON_DISCOVERABLE));
 }
 
 void print_status(void *)
 {
-    std::printf("btspike: %s internal free %zu, largest block %zu, psram free %zu, underruns %u\n",
+    std::printf("btspike: %s internal free %zu, largest block %zu, psram free %zu, late %u\n",
                 state_name(state),
                 heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                 heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL),
-                heap_caps_get_free_size(MALLOC_CAP_SPIRAM), underruns.load());
+                heap_caps_get_free_size(MALLOC_CAP_SPIRAM), late_callbacks.load());
 }
 
 void start_status_line()
