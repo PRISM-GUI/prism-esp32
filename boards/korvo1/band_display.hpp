@@ -15,6 +15,7 @@
 #include "driver/ppa.h"
 #include "esp_err.h"
 #include "esp_lcd_types.h"
+#include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
@@ -47,7 +48,8 @@ class BandDisplay final : public prism::platform::BandSink<prism::raster::Rgb565
 public:
     static constexpr int kWidth = 800;
     static constexpr int kHeight = 480;
-    static constexpr int kBandHeight = 48;
+    static constexpr int kBandHeight = CONFIG_PRISM_BAND_HEIGHT;
+    static_assert(kHeight % kBandHeight == 0, "CONFIG_PRISM_BAND_HEIGHT must divide the panel height");
 
     // PSRAM, the two bands in SRAM, the PPA, then the panel (on, showing a black buffer). The
     // error says what failed and what to try.

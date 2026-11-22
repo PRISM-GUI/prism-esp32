@@ -16,4 +16,13 @@ menu "PRISM on the Korvo-1"
             The fallback if the PPA misbehaves: each band PRISM draws is copied into the panel's
             buffer by the CPU, which then cannot draw the next band meanwhile.
 
+    config PRISM_BAND_HEIGHT
+        int "Rows per display band"
+        default 48
+        range 8 96
+        help
+            PRISM draws the 800x480 panel in bands of this many rows, two of them in internal
+            SRAM. A smaller band frees internal RAM (for Bluetooth, say) at the price of more
+            copies per frame. Must divide 480.
+
 endmenu
