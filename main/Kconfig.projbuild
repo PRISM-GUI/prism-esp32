@@ -22,12 +22,4 @@ menu "PRISM firmware"
         default "scope" if PRISM_APP_SCOPE
         default "btspike" if PRISM_APP_BTSPIKE
 
-    config PRISM_UI_SCALE_PERCENT
-        int "UI scale of the panel apps, in percent"
-        range 100 300
-        default 150
-        help
-            100 draws the widgets at their desktop size, 150 one and a half times larger. A finger
-            is bigger than a pointer: raise it if the panel is small or the buttons are hard to hit.
-
 endmenu

@@ -17,10 +17,15 @@ namespace korvo1 {
 // its BSP_BUTTON_VOLM voltage window is the one this button pulls the shared pin into (checked
 // on the board, 2026-11-21).
 inline constexpr bsp_button_t mode_button = BSP_BUTTON_VOLM;
+// The buttons printed VOL- and VOL+. VOL- is MODE's half of the swap (inferred, not yet pressed on
+// the board); VOL+ is taken as the BSP names it (unchecked).
+inline constexpr bsp_button_t volume_down_button = BSP_BUTTON_MODE;
+inline constexpr bsp_button_t volume_up_button = BSP_BUTTON_VOLP;
 
 class Button {
 public:
-    // The BSP's buttons, and a callback on `which`. The error says what failed.
+    // The BSP's buttons (created by the first call), and a callback on `which`. Open each button
+    // once. The error says what failed.
     static std::expected<Button, std::string> open(bsp_button_t which);
 
     // True once for each press since the last call.
