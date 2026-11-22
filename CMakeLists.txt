@@ -9,7 +9,8 @@ set(SDKCONFIG_DEFAULTS "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.defaults"
                        "${CMAKE_CURRENT_LIST_DIR}/sdkconfig.${PRISM_APP}")
 
 # The panel demos record a profile (dump on PLAY); the self-test has no use for the RAM it takes.
-if(NOT PRISM_APP STREQUAL "selftest")
+# -DPRISM_NO_PROFILE=ON builds a demo without marks, to measure what the marks themselves cost.
+if(NOT PRISM_APP STREQUAL "selftest" AND NOT PRISM_NO_PROFILE)
     set(PRISM_PROFILING ON CACHE BOOL "" FORCE)
 else()
     set(PRISM_PROFILING OFF CACHE BOOL "" FORCE)
