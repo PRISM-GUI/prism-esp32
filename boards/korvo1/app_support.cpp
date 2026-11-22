@@ -1,5 +1,6 @@
 #include "app_support.hpp"
 
+#include <cstdint>
 #include <cstdio>
 #include <utility>
 
@@ -51,10 +52,13 @@ namespace {
 constexpr int kLogicCore = 0;
 constexpr int kRenderCore = 1;
 
-void pin_next_thread_to(int core)
+// The logic thread's 64 KB stack goes to PSRAM: the render thread's 48 KB stack needs one
+// contiguous internal block, which the bands and the tree's small allocations leave too few of.
+void pin_next_thread_to(int core, std::uint32_t stack_caps)
 {
     auto cfg = esp_pthread_get_default_config();
     cfg.pin_to_core = core;
+    cfg.stack_alloc_caps = stack_caps;
     esp_pthread_set_cfg(&cfg);
 }
 
@@ -65,7 +69,10 @@ prism::platform::FrameOptions pinned_threads()
     return {.before_thread_start = [](prism::platform::ThreadRole role) {
         print_internal_heap(role == prism::platform::ThreadRole::logic ? "before logic thread"
                                                                        : "before render thread");
-        pin_next_thread_to(role == prism::platform::ThreadRole::logic ? kLogicCore : kRenderCore);
+        if (role == prism::platform::ThreadRole::logic)
+            pin_next_thread_to(kLogicCore, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        else
+            pin_next_thread_to(kRenderCore, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     }};
 }
 
