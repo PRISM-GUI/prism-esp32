@@ -201,6 +201,19 @@ void check_profile_clock_monotonic()
           "a per-core counter: use one clock both cores read (esp_timer_get_time)");
 }
 
+// app_main runs on a FreeRTOS task that is not a pthread, and a board opens its display there.
+// A mark on it must record, not abort (std::this_thread::get_id() asserts on such a task).
+void check_profile_mark_on_main_task()
+{
+    static constexpr auto site = prism::profile::make_site("selftest mark");
+    static std::array<prism::profile::Event, 4> storage{};
+    prism::profile::Recorder recorder{storage, 1};
+    recorder.instant(site);
+    std::size_t events = 0;
+    recorder.for_each_thread([&](const auto &tv) { events += tv.first.size() + tv.second.size(); });
+    check("profile mark on the app_main task", events == 1);
+}
+
 } // namespace
 
 extern "C" void app_main(void)
@@ -214,6 +227,7 @@ extern "C" void app_main(void)
     check_system_counters();
     check_profile_clock_rate();
     check_profile_clock_monotonic();
+    check_profile_mark_on_main_task();
     say("failures: %d\n", failures);
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(5000));
