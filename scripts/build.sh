@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the firmwares: scripts/build.sh [selftest|widgets|scope|all] (default: all).
+# Build the firmwares: scripts/build.sh [selftest|widgets|scope|btspike|all] (default: all).
 # Each one is build/<name>.bin, one image merged at address 0 (bootloader, partition table,
 # app): flash it with the web flasher or `esptool.py write_flash 0x0 build/<name>.bin`.
 #
@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-apps=(selftest widgets scope)
+apps=(selftest widgets scope btspike)
 # The image tag is the first 7 characters of the ESP-IDF commit in docker/Dockerfile, so the tag
 # CI publishes and the one used here cannot drift apart.
 idf_tag=idf-$(sed -n 's/^ARG IDF_COMMIT=\(.\{7\}\).*/\1/p' docker/Dockerfile)

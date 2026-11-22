@@ -11,6 +11,8 @@ menu "PRISM firmware"
             bool "widgets: the widget demo on the panel"
         config PRISM_APP_SCOPE
             bool "scope: the microphone scope on the panel"
+        config PRISM_APP_BTSPIKE
+            bool "btspike: Bluetooth audio next to the panel (throwaway spike)"
     endchoice
 
     config PRISM_APP_NAME
@@ -18,6 +20,7 @@ menu "PRISM firmware"
         default "selftest" if PRISM_APP_SELFTEST
         default "widgets" if PRISM_APP_WIDGETS
         default "scope" if PRISM_APP_SCOPE
+        default "btspike" if PRISM_APP_BTSPIKE
 
     config PRISM_UI_SCALE_PERCENT
         int "UI scale of the panel apps, in percent"

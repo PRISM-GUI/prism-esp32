@@ -7,5 +7,8 @@ endif()
 
 idf_component_register(
     SRCS "${app_source}"
-    REQUIRES prism esp_timer esp_psram freertos korvo1
+    # bt and nvs_flash are for btspike only. They are listed for every app: the build's first pass
+    # (early expansion) does not see PRISM_APP, so a condition here is silently false. With
+    # CONFIG_BT_ENABLED off (every other app) bt has no sources.
+    REQUIRES prism esp_timer esp_psram freertos korvo1 bt nvs_flash
 )
