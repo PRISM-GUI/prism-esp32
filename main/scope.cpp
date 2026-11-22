@@ -33,10 +33,12 @@ extern "C" void app_main()
     auto display = korvo1::BandDisplay::open();
     if (!display)
         korvo1::halt(display.error());
+    korvo1::print_internal_heap("after display");
     korvo1::Touch input = korvo1::open_touch_or_none();
 
     static prism_examples::ScopeModel model;
     static prism_examples::ScopeState state{scope_source()};
+    korvo1::print_internal_heap("after mic");
     prism::platform::frame_app(*display, input, model, [](prism::platform::FrameContext &ctx) {
         prism_examples::attach_scope(ctx, model, state);
         ctx.on_stats(korvo1::print_stats);

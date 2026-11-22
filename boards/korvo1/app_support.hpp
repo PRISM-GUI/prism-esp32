@@ -21,6 +21,9 @@ namespace korvo1 {
 
 void print_stats(std::string_view line);
 
+// "heap <where>: internal free N, largest block M": a thread stack needs one block that big.
+void print_internal_heap(const char *where);
+
 // The touch controller, or a Touch that never sees a finger (the reason is printed).
 Touch open_touch_or_none();
 

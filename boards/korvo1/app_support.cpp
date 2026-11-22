@@ -6,6 +6,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "esp_heap_caps.h"
 #include "esp_pthread.h"
 
 namespace korvo1 {
@@ -38,6 +39,13 @@ void print_stats(std::string_view line)
     std::printf("%.*s\n", int(line.size()), line.data());
 }
 
+void print_internal_heap(const char *where)
+{
+    std::printf("heap %s: internal free %u, largest block %u\n", where,
+                unsigned(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)),
+                unsigned(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
+}
+
 namespace {
 
 constexpr int kLogicCore = 0;
@@ -55,6 +63,8 @@ void pin_next_thread_to(int core)
 prism::platform::FrameOptions pinned_threads()
 {
     return {.before_thread_start = [](prism::platform::ThreadRole role) {
+        print_internal_heap(role == prism::platform::ThreadRole::logic ? "before logic thread"
+                                                                       : "before render thread");
         pin_next_thread_to(role == prism::platform::ThreadRole::logic ? kLogicCore : kRenderCore);
     }};
 }
