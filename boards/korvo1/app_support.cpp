@@ -9,6 +9,7 @@
 
 #include "esp_heap_caps.h"
 #include "esp_pthread.h"
+#include "sdkconfig.h"
 
 namespace korvo1 {
 
@@ -66,14 +67,17 @@ void pin_next_thread_to(int core, std::uint32_t stack_caps)
 
 prism::platform::FrameOptions pinned_threads()
 {
-    return {.before_thread_start = [](prism::platform::ThreadRole role) {
+    prism::platform::FrameOptions options;
+    options.ui_scale = float(CONFIG_PRISM_UI_SCALE_PERCENT) / 100.f;
+    options.before_thread_start = [](prism::platform::ThreadRole role) {
         print_internal_heap(role == prism::platform::ThreadRole::logic ? "before logic thread"
                                                                        : "before render thread");
         if (role == prism::platform::ThreadRole::logic)
             pin_next_thread_to(kLogicCore, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
         else
             pin_next_thread_to(kRenderCore, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    }};
+    };
+    return options;
 }
 
 Touch open_touch_or_none()

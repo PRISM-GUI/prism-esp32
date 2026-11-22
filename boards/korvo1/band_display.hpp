@@ -57,6 +57,8 @@ public:
     std::span<std::uint16_t> band(int index) override;
     void flush(int index, int first_row, int rows) override;
     void present() override;
+    // Two panel buffers that flip: the one drawn into shows the frame before last.
+    int frame_age() const override { return 2; }
     prism::core::Size size() const override
     {
         return {prism::core::Width{float(kWidth)}, prism::core::Height{float(kHeight)}};

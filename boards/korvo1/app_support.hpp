@@ -27,7 +27,8 @@ void print_internal_heap(const char *where);
 // The touch controller, or a Touch that never sees a finger (the reason is printed).
 Touch open_touch_or_none();
 
-// Logic on core 0, render on core 1. Core 1 is the SIMD core, per Espressif's forum: unconfirmed,
+// The frame runtime's options for this board: the UI scale (CONFIG_PRISM_UI_SCALE_PERCENT), and
+// logic on core 0, render on core 1. Core 1 is the SIMD core, per Espressif's forum: unconfirmed,
 // main/selftest.cpp checks it.
 prism::platform::FrameOptions pinned_threads();
 
