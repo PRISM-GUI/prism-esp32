@@ -1,6 +1,7 @@
 // The on-board self-test: PRISM's threads, a snapshot of the widget demo at the panel's size,
 // and the PSRAM. One line per check, ending in PASS or FAIL, then the number of failures.
 
+#include <embedded/spectrum.hpp>
 #include <embedded/widgets_app.hpp>
 #include <prism/app/widget_tree.hpp>
 #include <prism/raster/fonts.hpp>
@@ -10,7 +11,9 @@
 #include <prism/platform/frame_stats.hpp>
 #include <prism/profile/recorder.hpp>
 
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <atomic>
 #include <cstdint>
 #include <cstdarg>
@@ -161,6 +164,25 @@ void check_system_counters()
           "idle_us must be the mean over cores, in microseconds (CONFIG_FREERTOS_RUN_TIME_STATS_USING_ESP_TIMER)");
 }
 
+// The scope's FFT on a known signal: a half-scale 1 kHz sine at 16 kHz in a 1024-point window must
+// peak in bin 64 (1000 / (16000 / 1024) = 64) at -6 dB, and the DC bin must stay empty.
+void check_fft()
+{
+    constexpr std::size_t n = 1024;
+    constexpr float rate = 16000.f, hz = 1000.f;
+    std::array<float, n> in{};
+    std::array<float, n / 2> db{};
+    for (std::size_t i = 0; i < n; ++i)
+        in[i] = 0.5f * std::sin(2.f * 3.14159265f * hz * float(i) / rate);
+    prism_examples::Spectrum fft{n};
+    fft.compute(in, db);
+    const auto peak = std::ranges::max_element(db) - db.begin();
+    char line[96];
+    std::snprintf(line, sizeof line, "fft: 1 kHz sine peaks in bin %d at %.1f dB (want 64, -6)", int(peak), db[std::size_t(peak)]);
+    check(line, peak == 64 && std::abs(db[64] + 6.f) < 1.f && db[0] < -40.f,
+          "the CMSIS-DSP real FFT or its packed output order is wrong on this target");
+}
+
 // The tick rate times the time a 100 ms delay took must come out near 100 ms.
 void check_profile_clock_rate()
 {
@@ -226,6 +248,7 @@ extern "C" void app_main(void)
     check_allocation_count();
     check_system_counters();
     check_profile_clock_rate();
+    check_fft();
     check_profile_clock_monotonic();
     check_profile_mark_on_main_task();
     say("failures: %d\n", failures);
