@@ -1,6 +1,7 @@
 #include "touch.hpp"
 
-#include "bsp/display.h"
+#include "display_rotation.hpp"
+
 #include "bsp/touch.h"
 #include "esp_err.h"
 #include "esp_lcd_panel_io.h"
@@ -23,10 +24,13 @@ esp_err_t read_status(esp_lcd_touch_handle_t handle, std::uint8_t &status)
     return esp_lcd_panel_io_rx_param(handle->io, kStatusRegister, &status, 1);
 }
 
-prism::core::Point on_panel(const esp_lcd_touch_point_data_t &point)
+// The point in the frame PRISM draws: the panel's, turned as the display is.
+prism::core::Point in_frame(const esp_lcd_touch_point_data_t &point)
 {
-    return {prism::core::X{float(std::min<int>(point.x, BSP_LCD_H_RES - 1))},
-            prism::core::Y{float(std::min<int>(point.y, BSP_LCD_V_RES - 1))}};
+    const Pixel on_panel{std::min<int>(point.x, kPanelWidth - 1),
+                         std::min<int>(point.y, kPanelHeight - 1)};
+    const Pixel p = to_frame(on_panel, kRotation);
+    return {prism::core::X{float(p.x)}, prism::core::Y{float(p.y)}};
 }
 
 } // namespace
@@ -50,7 +54,7 @@ std::expected<Touch, std::string> Touch::open()
 // PRISM polls every ~16 ms and the controller samples every ~10 ms, so a poll can come before the
 // next sample: the finger is then where it was, not lifted. Only a ready sample changes the state.
 // The BSP configures the GT1151 with the panel's 800x480 and no swap or mirror, and the driver
-// applies none: its coordinates are already the panel's.
+// applies none: its coordinates are already the panel's, turned here into the frame's.
 // A failing bus must not leave a finger pressed: after kMaxErrors reads in a row that fail, the
 // finger is released until a read works again.
 std::optional<prism::core::Point> Touch::read()
@@ -72,7 +76,7 @@ std::optional<prism::core::Point> Touch::read()
     std::uint8_t count = 0;
     const bool touched =
         esp_lcd_touch_get_data(handle_.get(), &point, &count, 1) == ESP_OK && count > 0;
-    last_ = touched ? std::optional{on_panel(point)} : std::nullopt;
+    last_ = touched ? std::optional{in_frame(point)} : std::nullopt;
     return last_;
 }
 

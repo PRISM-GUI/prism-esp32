@@ -1,7 +1,9 @@
 #pragma once
 
 // The Korvo-1's 800x480 RGB panel as PRISM's BandSink (prism/platform/frame_target.hpp).
-// PRISM draws each frame as 48-row RGB565 bands into one of two band buffers in internal SRAM.
+// PRISM draws each frame as RGB565 bands of CONFIG_PRISM_BAND_HEIGHT rows into one of two band
+// buffers in internal SRAM. The frame is the panel, or the panel turned to portrait (480x800,
+// display_rotation.hpp): then the bands are 480 wide and each is turned as it is copied.
 // flush() starts the PPA copying the band into the panel's back buffer and returns, so the
 // render thread draws the next band into the other buffer meanwhile; band() waits for a buffer's
 // copy before handing it out again. present() hands the back buffer to the panel, which switches
@@ -11,6 +13,8 @@
 
 #include <prism/platform/frame_target.hpp>
 #include <prism/raster/pixel.hpp>
+
+#include "display_rotation.hpp"
 
 #include "driver/ppa.h"
 #include "esp_err.h"
@@ -46,10 +50,12 @@ struct PanelDelete {
 
 class BandDisplay final : public prism::platform::BandSink<prism::raster::Rgb565> {
 public:
-    static constexpr int kWidth = 800;
-    static constexpr int kHeight = 480;
+    // The frame PRISM draws: the panel's 800x480, or 480x800 when turned.
+    static constexpr int kWidth = kFrameWidth;
+    static constexpr int kHeight = kFrameHeight;
     static constexpr int kBandHeight = CONFIG_PRISM_BAND_HEIGHT;
-    static_assert(kHeight % kBandHeight == 0, "CONFIG_PRISM_BAND_HEIGHT must divide the panel height");
+    static_assert(kHeight % kBandHeight == 0, "CONFIG_PRISM_BAND_HEIGHT must divide the frame height "
+                                              "(480, or 800 when the display is turned)");
 
     // PSRAM, the two bands in SRAM, the PPA, then the panel (on, showing a black buffer). The
     // error says what failed and what to try.

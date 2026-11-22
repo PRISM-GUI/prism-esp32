@@ -21,9 +21,10 @@ namespace korvo1 {
 
 namespace {
 
-constexpr std::size_t kPixels = std::size_t(BandDisplay::kWidth) * BandDisplay::kHeight;
-constexpr std::size_t kPanelBufferBytes = kPixels * sizeof(std::uint16_t);
+constexpr std::size_t kPanelPixels = std::size_t(kPanelWidth) * kPanelHeight;
+constexpr std::size_t kPanelBufferBytes = kPanelPixels * sizeof(std::uint16_t);
 constexpr std::size_t kBandPixels = std::size_t(BandDisplay::kWidth) * BandDisplay::kBandHeight;
+constexpr std::size_t kBandKiB = kBandPixels * sizeof(std::uint16_t) / 1024;
 // A frame at 18 MHz takes ~28 ms: a flip not seen in 100 ms is lost, not worth freezing for.
 constexpr TickType_t kFlipTimeout = pdMS_TO_TICKS(100);
 
@@ -34,7 +35,7 @@ constexpr bool kCpuCopy = false;
 #endif
 
 #ifdef CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_MODE
-constexpr std::size_t kBouncePixels = BandDisplay::kWidth * CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_HEIGHT;
+constexpr std::size_t kBouncePixels = kPanelWidth * CONFIG_BSP_LCD_RGB_BOUNCE_BUFFER_HEIGHT;
 #else
 constexpr std::size_t kBouncePixels = 0;
 #endif
@@ -110,11 +111,25 @@ std::array<std::uint16_t *, 2> panel_buffers(esp_lcd_panel_handle_t panel)
     return {static_cast<std::uint16_t *>(buffers[0]), static_cast<std::uint16_t *>(buffers[1])};
 }
 
-// The band, RGB565 as it is, into rows [first_row, first_row + rows) of the panel buffer. The
+// The PPA turns a picture counter-clockwise (ppa_types.h): a board turned clockwise needs its
+// picture turned the other way, a quarter counter-clockwise.
+constexpr ppa_srm_rotation_angle_t ppa_angle(Rotation r)
+{
+    switch (r) {
+    case Rotation::clockwise: return PPA_SRM_ROTATION_ANGLE_90;
+    case Rotation::counter_clockwise: return PPA_SRM_ROTATION_ANGLE_270;
+    case Rotation::none: break;
+    }
+    return PPA_SRM_ROTATION_ANGLE_0;
+}
+
+// The band, RGB565 as it is, into the block of the panel buffer that shows frame rows
+// [first_row, first_row + rows): a run of rows, or of columns when the frame is turned. The
 // driver writes the band's cache back itself before the PPA reads it (ppa_srm.c).
 ppa_srm_oper_config_t srm_config(const std::uint16_t *band, int rows, std::uint16_t *panel_buffer,
                                  int first_row, SemaphoreHandle_t copied)
 {
+    const PanelBlock block = band_on_panel(first_row, rows, kRotation);
     ppa_srm_oper_config_t config{};
     config.in.buffer = band;
     config.in.pic_w = config.in.block_w = BandDisplay::kWidth;
@@ -123,16 +138,34 @@ ppa_srm_oper_config_t srm_config(const std::uint16_t *band, int rows, std::uint1
     config.in.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
     config.out.buffer = panel_buffer;
     config.out.buffer_size = kPanelBufferBytes;
-    config.out.pic_w = BandDisplay::kWidth;
-    config.out.pic_h = BandDisplay::kHeight;
-    config.out.block_offset_y = first_row;
+    config.out.pic_w = kPanelWidth;
+    config.out.pic_h = kPanelHeight;
+    config.out.block_offset_x = block.x;
+    config.out.block_offset_y = block.y;
     config.out.srm_cm = PPA_SRM_COLOR_MODE_RGB565;
-    config.rotation_angle = PPA_SRM_ROTATION_ANGLE_0;
+    config.rotation_angle = ppa_angle(kRotation);
     config.scale_x = config.scale_y = 1.f;
     config.alpha_update_mode = PPA_ALPHA_NO_CHANGE;
     config.mode = PPA_TRANS_MODE_NON_BLOCKING;
     config.user_data = copied;
     return config;
+}
+
+// The CPU's copy: unturned, the band's stride is the panel's, so its rows are one contiguous run
+// there too; turned, pixel by pixel.
+void cpu_copy(const std::uint16_t *band, int first_row, int rows, std::uint16_t *panel_buffer)
+{
+    if constexpr (kRotation == Rotation::none) {
+        std::memcpy(panel_buffer + std::size_t(first_row) * kPanelWidth, band,
+                    std::size_t(rows) * kPanelWidth * sizeof(std::uint16_t));
+    } else {
+        for (int row = 0; row < rows; ++row)
+            for (int x = 0; x < BandDisplay::kWidth; ++x) {
+                const Pixel at = to_panel({x, first_row + row}, kRotation);
+                panel_buffer[std::size_t(at.y) * kPanelWidth + at.x] =
+                    band[std::size_t(row) * BandDisplay::kWidth + x];
+            }
+    }
 }
 
 std::uint16_t *alloc_band()
@@ -191,8 +224,9 @@ std::expected<BandDisplay, std::string> BandDisplay::open()
     for (Band &band : display.bands_) {
         band.reset(alloc_band());
         if (!band)
-            return std::unexpected(std::string("no room in internal SRAM for the two 75 KB "
-                                               "bands: the display needs 150 KB of it"));
+            return std::unexpected("no room in internal SRAM for the two " +
+                                   std::to_string(kBandKiB) + " KB bands: lower "
+                                   "CONFIG_PRISM_BAND_HEIGHT");
     }
 
     display.flipped_.reset(xSemaphoreCreateBinary());
@@ -261,7 +295,8 @@ void BandDisplay::present()
     xSemaphoreTake(flipped_.get(), 0);
     // A buffer of the panel's own: the driver only writes the cache back and switches to it.
     ESP_ERROR_CHECK_WITHOUT_ABORT(
-        esp_lcd_panel_draw_bitmap(panel_.get(), 0, 0, kWidth, kHeight, panel_buffers_[back_index_]));
+        esp_lcd_panel_draw_bitmap(panel_.get(), 0, 0, kPanelWidth, kPanelHeight,
+                                  panel_buffers_[back_index_]));
     flip_pending_ = true;
     back_index_ ^= 1;
 }
@@ -280,9 +315,7 @@ esp_err_t BandDisplay::copy(int index, int first_row, int rows)
 {
     held_[index] = false;
     if constexpr (kCpuCopy) {
-        // The band's stride is the panel's: its rows are one contiguous run there too.
-        std::memcpy(panel_buffers_[back_index_] + std::size_t(first_row) * kWidth, bands_[index].get(),
-                    std::size_t(rows) * kWidth * sizeof(std::uint16_t));
+        cpu_copy(bands_[index].get(), first_row, rows, panel_buffers_[back_index_]);
         xSemaphoreGive(copied_[index].get());
         return ESP_OK;
     } else {

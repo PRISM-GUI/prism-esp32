@@ -1,4 +1,5 @@
-# Host (native) tests of the board code that is pure logic: the microphone's PCM conversion.
+# Host (native) tests of the board code that is pure logic: the microphone's PCM conversion and
+# the display rotation.
 # A separate Meson project, so ESP-IDF's cross build never applies to it.
 #
 #   meson setup host-build host && meson test -C host-build
@@ -12,5 +13,9 @@ repo_inc = include_directories(import('fs').parent(meson.current_source_dir()))
 doctest_dep = dependency('doctest', fallback : ['doctest', 'doctest_dep'])
 
 test('test_pcm', executable('test_pcm', files('test_pcm.cpp'),
+  include_directories : repo_inc,
+  dependencies : doctest_dep))
+
+test('test_rotation', executable('test_rotation', files('test_rotation.cpp'),
   include_directories : repo_inc,
   dependencies : doctest_dep))

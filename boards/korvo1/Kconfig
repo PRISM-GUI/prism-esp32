@@ -16,14 +16,30 @@ menu "PRISM on the Korvo-1"
             The fallback if the PPA misbehaves: each band PRISM draws is copied into the panel's
             buffer by the CPU, which then cannot draw the next band meanwhile.
 
+    choice PRISM_DISPLAY_ROTATION
+        prompt "How the board is held"
+        default PRISM_DISPLAY_ROTATION_0
+        help
+            The frame the apps draw, and where touches land in it. Turned, the frame is 480x800:
+            each band is turned by the PPA (or the CPU) as it is copied into the panel's buffer.
+
+        config PRISM_DISPLAY_ROTATION_0
+            bool "Landscape (800x480)"
+        config PRISM_DISPLAY_ROTATION_90
+            bool "Portrait, board turned clockwise: the panel's left edge on top (480x800)"
+        config PRISM_DISPLAY_ROTATION_270
+            bool "Portrait, board turned counter-clockwise: the panel's right edge on top (480x800)"
+    endchoice
+
     config PRISM_BAND_HEIGHT
         int "Rows per display band"
+        default 40 if !PRISM_DISPLAY_ROTATION_0
         default 48
         range 8 96
         help
-            PRISM draws the 800x480 panel in bands of this many rows, two of them in internal
-            SRAM. A smaller band frees internal RAM (for Bluetooth, say) at the price of more
-            copies per frame. Must divide 480.
+            PRISM draws the frame in bands of this many rows, two of them in internal SRAM. A
+            smaller band frees internal RAM (for Bluetooth, say) at the price of more copies per
+            frame. Must divide the frame's height: 480 in landscape, 800 in portrait.
 
     config PRISM_UI_SCALE_PERCENT
         int "UI scale of the panel apps, in percent"

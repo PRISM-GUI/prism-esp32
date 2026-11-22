@@ -1,7 +1,8 @@
 #pragma once
 
 // The Korvo-1's GT1151 touch controller (the BSP's handle, on I2C) as PRISM's TouchSource
-// (prism/platform/frame_target.hpp), polled: the first finger, in panel pixels.
+// (prism/platform/frame_target.hpp), polled: the first finger, in the pixels of the frame PRISM
+// draws (the panel turned as the display is, display_rotation.hpp).
 
 #include <prism/platform/frame_target.hpp>
 
