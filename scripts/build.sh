@@ -17,8 +17,10 @@ image=${PRISM_ESP32_IMAGE:-ghcr.io/jeandet/prism-esp32-dev:$idf_tag}
 usage() { local IFS='|'; echo "usage: $0 [${apps[*]}|all]" >&2; exit 2; }
 
 in_container() {
-    local engine
-    engine=$(command -v podman || command -v docker) || {
+    # PRISM_ESP32_ENGINE picks one when both exist: CI builds the image with Docker, and
+    # GitHub's runners also have Podman, which cannot see Docker's images.
+    local engine=${PRISM_ESP32_ENGINE:-}
+    [[ -n $engine ]] || engine=$(command -v podman || command -v docker) || {
         echo "Neither ESP-IDF (IDF_PATH) nor Podman/Docker found: install one of them." >&2
         exit 1
     }
