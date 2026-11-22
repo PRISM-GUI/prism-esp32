@@ -1,3 +1,3 @@
 [submodule "subprojects/prism"]
 	path = subprojects/prism
-	url = https://github.com/jeandet/PRISM
+	url = https://github.com/PRISM-GUI/PRISM

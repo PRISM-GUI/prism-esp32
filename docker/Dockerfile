@@ -2,7 +2,7 @@
 # ESP32-S31, and Meson (PRISM's build). scripts/build.sh runs in it; nothing else on the host
 # needs to know ESP-IDF.
 #
-#   podman build -f docker/Dockerfile -t ghcr.io/jeandet/prism-esp32-dev:idf-<sha7> .
+#   podman build -f docker/Dockerfile -t ghcr.io/prism-gui/prism-esp32-dev:idf-<sha7> .
 #
 # ESP-IDF supports the ESP32-S31 on its master branch only: IDF_COMMIT pins the commit every
 # firmware of this repository is built and tested with.

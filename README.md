@@ -1,6 +1,6 @@
 # PRISM on the ESP32-S31-Korvo-1
 
-This repository runs [PRISM](https://github.com/jeandet/PRISM) on Espressif's
+This repository runs [PRISM](https://github.com/PRISM-GUI/PRISM) on Espressif's
 ESP32-S31-Korvo-1 board. You can flash a demo and watch it run without installing ESP-IDF.
 
 ## The board
@@ -114,7 +114,7 @@ If something is wrong, the line says what to do next. For example
 **In the browser (Chrome or Edge, nothing to install):**
 
 1. Flash `widgets.bin` or `scope.bin`, and close any terminal on the port.
-2. Open [PRISM trace](https://jeandet.github.io/PRISM/trace.html), press **Connect** and pick
+2. Open [PRISM trace](https://prism-gui.github.io/PRISM/trace.html), press **Connect** and pick
    the board. Its console appears in the page.
 3. Let the demo run for 15 seconds, then press the **MODE** button.
 4. When the page says the trace arrived, press **Open in Perfetto**.
@@ -164,17 +164,17 @@ next one.
 
 Docker or Podman is all you need.
 
-    git clone --recursive https://github.com/jeandet/prism-esp32
+    git clone --recursive https://github.com/PRISM-GUI/prism-esp32
     cd prism-esp32
     scripts/build.sh            # selftest, widgets and scope
     scripts/build.sh widgets    # just one
 
 The images are `build/selftest.bin`, `build/widgets.bin` and `build/scope.bin`.
 
-The script runs in the build image, `ghcr.io/jeandet/prism-esp32-dev`, tagged `idf-<sha7>`, the first 7 characters
+The script runs in the build image, `ghcr.io/prism-gui/prism-esp32-dev`, tagged `idf-<sha7>`, the first 7 characters
 of the pinned ESP-IDF commit in `docker/Dockerfile` (and `latest`). It has ESP-IDF at the pinned commit. To build the image yourself:
 
-    podman build -f docker/Dockerfile -t ghcr.io/jeandet/prism-esp32-dev:idf-<sha7> .
+    podman build -f docker/Dockerfile -t ghcr.io/prism-gui/prism-esp32-dev:idf-<sha7> .
 
 If you already have ESP-IDF in your shell (`IDF_PATH` set), the script runs `idf.py` directly.
 In that case you also need Meson 1.5 or newer.
@@ -183,9 +183,9 @@ The image is `linux/amd64` only. On an Apple-silicon Mac, Docker or Podman runs 
 emulation, which is slow. There, flash the prebuilt images from a release or a CI run, or use a
 native ESP-IDF install (set `IDF_PATH`, as above).
 
-The package `ghcr.io/jeandet/prism-esp32-dev` must be made public once, by the maintainer, after
-the first CI publish: GitHub, your profile, Packages, the package, Package settings, Change
-visibility (`https://github.com/users/<owner>/packages/container/prism-esp32-dev/settings`).
+The package `ghcr.io/prism-gui/prism-esp32-dev` must be made public once, by the maintainer, after
+the first CI publish: the PRISM-GUI organization, Packages, the package, Package settings, Change
+visibility (`https://github.com/orgs/PRISM-GUI/packages/container/prism-esp32-dev/settings`).
 Until then, others cannot pull it.
 
 Flash from the host, not from the container. USB does not reach a container on macOS.

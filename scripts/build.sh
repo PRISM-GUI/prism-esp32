@@ -12,7 +12,7 @@ apps=(selftest widgets scope)
 # The image tag is the first 7 characters of the ESP-IDF commit in docker/Dockerfile, so the tag
 # CI publishes and the one used here cannot drift apart.
 idf_tag=idf-$(sed -n 's/^ARG IDF_COMMIT=\(.\{7\}\).*/\1/p' docker/Dockerfile)
-image=${PRISM_ESP32_IMAGE:-ghcr.io/jeandet/prism-esp32-dev:$idf_tag}
+image=${PRISM_ESP32_IMAGE:-ghcr.io/prism-gui/prism-esp32-dev:$idf_tag}
 
 usage() { local IFS='|'; echo "usage: $0 [${apps[*]}|all]" >&2; exit 2; }
 
