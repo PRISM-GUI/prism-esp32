@@ -1,0 +1,6 @@
+config PRISM_BT_HEADSET_NAME
+    string "Headset to connect to at boot (its Bluetooth name, or part of it)"
+    default "WH-1000XM3"
+    help
+        The bonded headset is connected to first; with none bonded, the stack scans for the first
+        device whose name contains this string.

@@ -10,5 +10,7 @@ idf_component_register(
     # bt and nvs_flash are for btspike only. They are listed for every app: the build's first pass
     # (early expansion) does not see PRISM_APP, so a condition here is silently false. With
     # CONFIG_BT_ENABLED off (every other app) bt has no sources.
-    REQUIRES prism esp_timer esp_psram freertos korvo1 bt nvs_flash
+    # prism_bt is the headset device (components/prism_bt): the tone app uses it, and with
+    # Bluetooth off nothing references its archive, so it is built and never linked.
+    REQUIRES prism esp_timer esp_psram freertos korvo1 bt nvs_flash prism_bt
 )
