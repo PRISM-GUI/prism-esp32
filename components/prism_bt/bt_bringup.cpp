@@ -50,6 +50,19 @@ void log_heap(const char* where)
                 static_cast<std::size_t>(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL)));
 }
 
+// Bluedroid's target accepts no passthrough command until told which: its default set is empty,
+// so every headset button is refused as "not implemented" before our callback sees it (and a Sony
+// then asks for the play status, PDU 0x30, which goes unanswered too).
+void accept_remote_buttons()
+{
+    esp_avrc_psth_bit_mask_t buttons{};
+    for (const auto key : {ESP_AVRC_PT_CMD_PLAY, ESP_AVRC_PT_CMD_PAUSE, ESP_AVRC_PT_CMD_STOP,
+                           ESP_AVRC_PT_CMD_FORWARD, ESP_AVRC_PT_CMD_BACKWARD})
+        esp_avrc_psth_bit_mask_operation(ESP_AVRC_BIT_MASK_OP_SET, &buttons, key);
+    check("esp_avrc_tg_set_psth_cmd_filter",
+          esp_avrc_tg_set_psth_cmd_filter(ESP_AVRC_PSTH_FILTER_SUPPORTED_CMD, &buttons));
+}
+
 void start_profiles()
 {
     check("esp_bt_gap_set_device_name", esp_bt_gap_set_device_name("PRISM"));
@@ -58,6 +71,7 @@ void start_profiles()
     check("esp_avrc_ct_register_callback", esp_avrc_ct_register_callback(avrc_ct_callback));
     check("esp_avrc_tg_init", esp_avrc_tg_init());
     check("esp_avrc_tg_register_callback", esp_avrc_tg_register_callback(avrc_tg_callback));
+    accept_remote_buttons();
     check("esp_a2d_source_init", esp_a2d_source_init());
     check("esp_a2d_register_callback", esp_a2d_register_callback(a2d_callback));
     check("esp_a2d_source_register_data_callback",
