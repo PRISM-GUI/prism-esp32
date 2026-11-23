@@ -16,7 +16,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <memory>
-#include <mutex>
+#include <chrono>
 #include <span>
 #include <string>
 #include <string_view>
@@ -86,15 +86,22 @@ private:
     void start_writer();
     void run();
     void write(std::vector<std::int16_t>& samples);
+    void apply_requests();
     void close_codec();
+    [[nodiscard]] bool wait_for_rate(int sample_rate) const;
 
     std::atomic<bool> quit_{false};
     std::thread writer_;
 
-    std::mutex codec_mutex_;         // one write against a close-and-reopen, and set_out_vol
-    esp_codec_dev_handle_t device_ = nullptr;
-    std::atomic<int> rate_{0};       // the open rate, 0 when closed
+    // Only the writer touches the codec once it runs: a writer blocked in the DMA would otherwise
+    // hold a codec lock nearly all the time, and at its higher priority take it back before the
+    // thread asking for a new rate or volume ever got it. Requests travel as atomics instead.
+    esp_codec_dev_handle_t device_ = nullptr;   // made by the first open(), before the writer
+    std::atomic<int> wanted_rate_{0};   // what the last open() asked for
+    std::atomic<int> rate_{0};          // the open rate, 0 while closed
+    std::atomic<int> failed_rate_{0};   // a rate the codec refused
     std::atomic<int> volume_{kMaxVolume};
+    int applied_volume_ = -1;           // the writer's own
 
     audio::RenderGate gate_;
     SpeakerStream* current_ = nullptr;
@@ -118,7 +125,6 @@ Speaker::~Speaker()
 {
     quit_ = true;
     if (writer_.joinable()) writer_.join();   // out of the pull and out of the codec before closing
-    const std::lock_guard lock(codec_mutex_);
     close_codec();
     device_ = nullptr;
 }
@@ -148,11 +154,12 @@ std::unique_ptr<audio::DeviceStream> Speaker::open(const audio::Format& format, 
         error = "the speaker's codec did not start";
         return nullptr;
     }
-    if (!open_codec(format.sample_rate)) {
+    wanted_rate_ = format.sample_rate;
+    start_writer();
+    if (!wait_for_rate(format.sample_rate)) {
         error = "the speaker's codec refused the rate";
         return nullptr;
     }
-    start_writer();
     return std::make_unique<SpeakerStream>(*this, std::move(pull));
 }
 
@@ -173,28 +180,23 @@ void Speaker::release(SpeakerStream& stream)
 
 void Speaker::set_volume(float volume)
 {
-    const auto steps = static_cast<int>(std::clamp(volume, 0.f, 1.f) * kMaxVolume);
-    volume_ = steps;
-    const std::lock_guard lock(codec_mutex_);
-    if (device_ != nullptr && rate_.load() != 0)
-        log_failure("esp_codec_dev_set_out_vol", esp_codec_dev_set_out_vol(device_, steps));
+    volume_ = static_cast<int>(std::clamp(volume, 0.f, 1.f) * kMaxVolume);
 }
 
-// The codec exists from the first open() on: a later open() at another rate reopens the same
-// handle, so the switch between 44.1 and 48 kHz costs the reopen and nothing else.
+// The codec exists from the first open() on, made on the opening thread before the writer starts:
+// a later open() at another rate has the writer reopen the same handle, so the switch between 44.1
+// and 48 kHz costs the reopen and nothing else.
 bool Speaker::create_codec()
 {
-    const std::lock_guard lock(codec_mutex_);
     if (device_ != nullptr) return true;
     device_ = bsp_audio_codec_speaker_init();
     if (device_ == nullptr) std::printf("speaker: bsp_audio_codec_speaker_init returned null\n");
     return device_ != nullptr;
 }
 
+// On the writer only.
 bool Speaker::open_codec(int sample_rate)
 {
-    if (device_ != nullptr && rate_.load() == sample_rate) return true;
-    const std::lock_guard lock(codec_mutex_);
     if (device_ == nullptr) return false;
     if (rate_.load() != 0) {
         close_codec();
@@ -211,7 +213,7 @@ bool Speaker::open_codec(int sample_rate)
         return false;
     }
     rate_ = sample_rate;
-    log_failure("esp_codec_dev_set_out_vol", esp_codec_dev_set_out_vol(device_, volume_.load()));
+    applied_volume_ = -1;   // a reopened codec takes the volume again
     return true;
 }
 
@@ -236,17 +238,45 @@ void Speaker::run()
     std::vector<std::int16_t> samples(kFrames * kChannels);
     const std::span<std::int16_t> block{samples};
     while (!quit_) {
+        apply_requests();
         if (!gate_.call(std::as_writable_bytes(block), kFrames))
             std::ranges::fill(samples, std::int16_t{0});
+        if (rate_.load() == 0) {   // the codec refused the last rate: nothing paces us
+            std::this_thread::sleep_for(std::chrono::milliseconds{20});
+            continue;
+        }
         write(samples);
     }
 }
 
-// Blocks on the I2S DMA until the codec took the whole buffer: that is the pacing. The codec lock
-// keeps a close-and-reopen (a rate change) out of the middle of a write.
+// Between two writes: the rate the last open() asked for, and the volume.
+void Speaker::apply_requests()
+{
+    if (const auto wanted = wanted_rate_.load(); wanted != 0 && wanted != rate_.load()
+                                                 && wanted != failed_rate_.load()) {
+        if (!open_codec(wanted)) failed_rate_ = wanted;
+    }
+    if (const auto volume = volume_.load(); rate_.load() != 0 && volume != applied_volume_) {
+        log_failure("esp_codec_dev_set_out_vol", esp_codec_dev_set_out_vol(device_, volume));
+        applied_volume_ = volume;
+    }
+}
+
+// The opening thread waits for the writer to apply the rate: an Output says playing only once the
+// codec runs at its rate. A second at most: the reopen takes a few milliseconds.
+bool Speaker::wait_for_rate(int sample_rate) const
+{
+    for (int waited = 0; waited < 1000; ++waited) {
+        if (rate_.load() == sample_rate) return true;
+        if (failed_rate_.load() == sample_rate) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+    return false;
+}
+
+// Blocks on the I2S DMA until the codec took the whole buffer: that is the pacing.
 void Speaker::write(std::vector<std::int16_t>& samples)
 {
-    const std::lock_guard lock(codec_mutex_);
     log_failure("esp_codec_dev_write",
                 esp_codec_dev_write(device_, samples.data(),
                                     static_cast<int>(samples.size() * sizeof(std::int16_t))));
