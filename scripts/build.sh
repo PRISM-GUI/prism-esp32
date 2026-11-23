@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-apps=(selftest widgets scope btspike)
+apps=(selftest widgets scope tone btspike)
 # The image tag is the first 7 characters of the ESP-IDF commit in docker/Dockerfile, so the tag
 # CI publishes and the one used here cannot drift apart.
 idf_tag=idf-$(sed -n 's/^ARG IDF_COMMIT=\(.\{7\}\).*/\1/p' docker/Dockerfile)

@@ -11,6 +11,8 @@ menu "PRISM firmware"
             bool "widgets: the widget demo on the panel"
         config PRISM_APP_SCOPE
             bool "scope: the microphone scope on the panel"
+        config PRISM_APP_TONE
+            bool "tone: the speaker device, a 440 Hz tone at 44.1 then 48 kHz"
         config PRISM_APP_BTSPIKE
             bool "btspike: Bluetooth audio next to the panel (throwaway spike)"
     endchoice
@@ -20,6 +22,7 @@ menu "PRISM firmware"
         default "selftest" if PRISM_APP_SELFTEST
         default "widgets" if PRISM_APP_WIDGETS
         default "scope" if PRISM_APP_SCOPE
+        default "tone" if PRISM_APP_TONE
         default "btspike" if PRISM_APP_BTSPIKE
 
 endmenu

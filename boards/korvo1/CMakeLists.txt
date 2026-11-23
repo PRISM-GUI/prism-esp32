@@ -3,7 +3,7 @@
 # TouchSource, and the microphones as the scope's SampleSource. main requires it.
 idf_component_register(
     SRCS app_support.cpp port.cpp profile_clock.cpp band_display.cpp touch.cpp mic_source.cpp bsp_timing.c
-         uart_stream.cpp buttons.cpp profile_dump.cpp
+         uart_stream.cpp buttons.cpp profile_dump.cpp speaker_device.cpp
     INCLUDE_DIRS .
     LDFRAGMENTS linker.lf
     REQUIRES prism esp_timer esp_hw_support esp_system heap freertos esp_psram esp_lcd
