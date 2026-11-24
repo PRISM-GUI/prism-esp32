@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build the firmwares: scripts/build.sh [selftest|widgets|scope|btspike|all] (default: all).
+# Build the firmwares: scripts/build.sh [selftest|widgets|scope|tone|btspike|all] (default: all).
 # Each one is build/<name>.bin, one image merged at address 0 (bootloader, partition table,
 # app): flash it with the web flasher or `esptool.py write_flash 0x0 build/<name>.bin`.
 #

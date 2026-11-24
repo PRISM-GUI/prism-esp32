@@ -2,7 +2,7 @@
 set(app_source "${CONFIG_PRISM_APP_NAME}.cpp")
 if(NOT CMAKE_BUILD_EARLY_EXPANSION AND NOT EXISTS "${CMAKE_CURRENT_LIST_DIR}/${app_source}")
     message(FATAL_ERROR "main/${app_source} does not exist yet: the '${CONFIG_PRISM_APP_NAME}' "
-                        "firmware is not written. Build selftest or widgets.")
+                        "firmware is not written. Build one of the apps in main/ (scripts/build.sh lists them).")
 endif()
 
 idf_component_register(
