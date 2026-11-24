@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1140" height="460" viewBox="0 0 1140 460">
+  <rect x="0" y="0" width="1140" height="460" fill="#ffffff"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#333333"/>
+    </marker>
+    <marker id="arrowup" markerWidth="10" markerHeight="8" refX="4" refY="0" orient="auto">
+      <path d="M0,8 L4,0 L8,8 z" fill="#333333"/>
+    </marker>
+    <style>
+      text { font-family: Helvetica, Arial, sans-serif; fill: #222222; }
+      .box { fill: #f4f6fa; stroke: #3f5c8a; stroke-width: 1.5; }
+      .sram { fill: #eaf2e6; stroke: #4a7a3a; stroke-width: 1.5; }
+      .psram { fill: #fdf1e0; stroke: #a2671c; stroke-width: 1.5; }
+      .title { font-size: 16px; font-weight: bold; }
+      .name { font-size: 14px; font-weight: bold; }
+      .sub { font-size: 12px; fill: #444444; }
+      .flow { font-size: 12px; fill: #333333; }
+      .line { stroke: #333333; stroke-width: 1.5; fill: none; }
+      .dash { stroke: #555555; stroke-width: 1.5; stroke-dasharray: 7 4; fill: none; }
+    </style>
+  </defs>
+
+  <text class="title" x="24" y="30">A frame goes out in bands, two buffers at a time</text>
+  <text class="sub" x="24" y="54">The render thread draws in fast internal SRAM. The PPA copies each band out while the next one is drawn.</text>
+
+  <rect class="box" x="20" y="150" width="150" height="60" rx="6"/>
+  <text class="name" x="34" y="176">render thread</text>
+  <text class="sub" x="34" y="196">core 1</text>
+
+  <rect class="sram" x="280" y="92" width="190" height="56" rx="6"/>
+  <text class="name" x="294" y="116">band buffer 0</text>
+  <text class="sub" x="294" y="134">internal SRAM, RGB565</text>
+
+  <rect class="sram" x="280" y="212" width="190" height="56" rx="6"/>
+  <text class="name" x="294" y="236">band buffer 1</text>
+  <text class="sub" x="294" y="254">internal SRAM, RGB565</text>
+
+  <line class="line" x1="170" y1="164" x2="276" y2="124" marker-end="url(#arrow)"/>
+  <text class="flow" x="190" y="120">draws a band</text>
+  <line class="line" x1="170" y1="196" x2="276" y2="236" marker-end="url(#arrow)"/>
+  <text class="flow" x="190" y="252">draws next</text>
+
+  <rect class="box" x="580" y="92" width="200" height="176" rx="6"/>
+  <text class="name" x="594" y="118">PPA</text>
+  <text class="sub" x="594" y="138">copies a finished band</text>
+  <text class="sub" x="594" y="154">into the panel buffer,</text>
+  <text class="sub" x="594" y="170">turned too in portrait</text>
+  <text class="sub" x="594" y="192">the CPU does it when</text>
+  <text class="sub" x="594" y="208">PRISM_DISPLAY_CPU_COPY</text>
+  <text class="sub" x="594" y="224">is on, and cannot draw</text>
+  <text class="sub" x="594" y="240">meanwhile</text>
+
+  <line class="line" x1="470" y1="120" x2="576" y2="140" marker-end="url(#arrow)"/>
+  <text class="flow" x="492" y="112">flush(0)</text>
+  <line class="line" x1="470" y1="240" x2="576" y2="220" marker-end="url(#arrow)"/>
+  <text class="flow" x="492" y="262">flush(1)</text>
+
+  <rect class="psram" x="890" y="130" width="230" height="96" rx="6"/>
+  <text class="name" x="904" y="156">panel back buffer</text>
+  <text class="sub" x="904" y="176">PSRAM, one of two, 750 KB</text>
+  <text class="sub" x="904" y="194">the panel reads it at its</text>
+  <text class="sub" x="904" y="210">own refresh rate</text>
+
+  <line class="line" x1="780" y1="178" x2="886" y2="178" marker-end="url(#arrow)"/>
+  <text class="flow" x="785" y="170">one copied band</text>
+
+  <path class="dash" d="M1000,226 L1000,330 L95,330 L95,214" marker-end="url(#arrowup)"/>
+  <text class="flow" x="200" y="324">present(): the panel switches to this buffer at its next refresh</text>
+  <text class="flow" x="200" y="352">the next frame's first band waits for that switch before its copy</text>
+
+  <text class="sub" x="24" y="405">CONFIG_PRISM_BAND_HEIGHT rows per band: 48 by default, 40 in portrait, and it must divide the frame height.</text>
+  <text class="sub" x="24" y="425">A smaller band frees internal RAM, at the price of more copies per frame. Two bands are always held.</text>
+</svg>

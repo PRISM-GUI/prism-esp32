@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="560" viewBox="0 0 920 560">
+  <rect x="0" y="0" width="920" height="560" fill="#ffffff"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#333333"/>
+    </marker>
+    <style>
+      text { font-family: Helvetica, Arial, sans-serif; fill: #222222; }
+      .box { fill: #f4f6fa; stroke: #3f5c8a; stroke-width: 1.5; }
+      .repo { fill: #eaf2e6; stroke: #4a7a3a; stroke-width: 1.5; }
+      .ext { fill: #fdf1e0; stroke: #a2671c; stroke-width: 1.5; }
+      .title { font-size: 16px; font-weight: bold; }
+      .name { font-size: 14px; font-weight: bold; }
+      .sub { font-size: 12px; fill: #444444; }
+      .flow { font-size: 12px; fill: #333333; }
+      .line { stroke: #333333; stroke-width: 1.5; fill: none; }
+    </style>
+  </defs>
+
+  <text class="title" x="24" y="30">The firmware is one app source over three components</text>
+  <text class="sub" x="24" y="52">main/ holds one .cpp per app. The components come from this repository, ESP-IDF and the board package.</text>
+
+  <!-- row 1: main -->
+  <rect class="box" x="24" y="72" width="330" height="92" rx="6"/>
+  <text class="name" x="38" y="98">main/</text>
+  <text class="sub" x="38" y="118">selftest.cpp  widgets.cpp  scope.cpp</text>
+  <text class="sub" x="38" y="136">tone.cpp  btspike.cpp</text>
+  <text class="sub" x="38" y="156">Kconfig picks one: CONFIG_PRISM_APP_NAME</text>
+
+  <line class="line" x1="189" y1="164" x2="189" y2="204" marker-end="url(#arrow)"/>
+  <text class="flow" x="199" y="190">REQUIRES (the same list for every app)</text>
+
+  <!-- row 2: the three components -->
+  <rect class="repo" x="24" y="206" width="250" height="108" rx="6"/>
+  <text class="name" x="38" y="232">components/prism</text>
+  <text class="sub" x="38" y="252">PRISM built by Meson with IDF's</text>
+  <text class="sub" x="38" y="268">compiler and flags, imported as</text>
+  <text class="sub" x="38" y="284">static libraries: core, raster,</text>
+  <text class="sub" x="38" y="300">platform, embedded apps</text>
+
+  <rect class="repo" x="298" y="206" width="282" height="108" rx="6"/>
+  <text class="name" x="312" y="232">boards/korvo1</text>
+  <text class="sub" x="312" y="252">the board as PRISM devices: panel,</text>
+  <text class="sub" x="312" y="268">touch, microphones, speaker, JPEG</text>
+  <text class="sub" x="312" y="284">decoder, profile clock, counters,</text>
+  <text class="sub" x="312" y="300">buttons, UART dump</text>
+
+  <rect class="repo" x="604" y="206" width="204" height="108" rx="6"/>
+  <text class="name" x="618" y="232">components/prism_bt</text>
+  <text class="sub" x="618" y="252">bluetooth::start(), the</text>
+  <text class="sub" x="618" y="268">"headset" device, the link</text>
+  <text class="sub" x="618" y="284">task, the AVRCP buttons.</text>
+  <text class="sub" x="618" y="300">Needs CONFIG_BT_ENABLED</text>
+
+  <!-- row 3: what each one stands on -->
+  <line class="line" x1="149" y1="314" x2="149" y2="348" marker-end="url(#arrow)"/>
+  <text class="flow" x="157" y="336">built from</text>
+
+  <rect class="ext" x="24" y="350" width="250" height="80" rx="6"/>
+  <text class="name" x="38" y="376">subprojects/prism</text>
+  <text class="sub" x="38" y="396">the PRISM submodule: its headers</text>
+  <text class="sub" x="38" y="412">and its Meson build live here</text>
+
+  <rect class="box" x="298" y="350" width="510" height="80" rx="6"/>
+  <text class="name" x="312" y="376">PRISM's device seams</text>
+  <text class="sub" x="312" y="396">BandSink (panel)   TouchSource (touch)   SampleSource (microphones)</text>
+  <text class="sub" x="312" y="412">DeviceBackend (speaker, headset)   ImageDecoder (JPEG)</text>
+
+  <line class="line" x1="439" y1="314" x2="439" y2="346" marker-end="url(#arrow)"/>
+  <text class="flow" x="447" y="336">implements</text>
+
+  <line class="line" x1="706" y1="314" x2="706" y2="346" marker-end="url(#arrow)"/>
+  <text class="flow" x="714" y="336">registers the headset backend</text>
+
+  <!-- row 4: ESP-IDF -->
+  <rect class="ext" x="24" y="458" width="894" height="80" rx="6"/>
+  <text class="name" x="38" y="484">ESP-IDF at the pinned commit, plus the board package esp32_s31_korvo_1_noglib 1.1.0</text>
+  <text class="sub" x="38" y="504">FreeRTOS, Bluedroid, the RGB panel and PPA drivers, the codec and touch drivers, the JPEG engine.</text>
+  <text class="sub" x="38" y="522">docker/Dockerfile pins the commit. scripts/build.sh builds inside that image unless IDF_PATH is set.</text>
+
+  <line class="line" x1="553" y1="430" x2="553" y2="454" marker-end="url(#arrow)"/>
+  <text class="flow" x="561" y="448">calls its drivers</text>
+</svg>
