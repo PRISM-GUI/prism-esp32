@@ -55,7 +55,7 @@ constexpr std::size_t max_frame_bytes = 64 * 1024;
 
 // The bundle, gzipped by scripts/build.sh into ${CMAKE_BINARY_DIR}/crdt-web and embedded by
 // main/CMakeLists.txt (EMBED_FILES, so these are the bytes verbatim). The certificate and its key
-// come from the build too (EMBED_TXTFILES, which appends a NUL: hence the -1 below).
+// come from the build too (EMBED_TXTFILES, which appends the NUL mbedTLS's PEM parser needs).
 extern "C" {
 extern const std::uint8_t cert_pem_start[] asm("_binary_cert_pem_start");
 extern const std::uint8_t cert_pem_end[] asm("_binary_cert_pem_end");
@@ -386,9 +386,10 @@ std::string Server::start()
 
     httpd_ssl_config_t config = HTTPD_SSL_CONFIG_DEFAULT();
     config.servercert = cert_pem_start;
-    config.servercert_len = static_cast<std::size_t>(cert_pem_end - cert_pem_start) - 1;
+    // mbedTLS parses PEM only when the length counts the NUL that EMBED_TXTFILES appends.
+    config.servercert_len = static_cast<std::size_t>(cert_pem_end - cert_pem_start);
     config.prvtkey_pem = key_pem_start;
-    config.prvtkey_len = static_cast<std::size_t>(key_pem_end - key_pem_start) - 1;
+    config.prvtkey_len = static_cast<std::size_t>(key_pem_end - key_pem_start);
     // The five browsers the access point takes, plus the server's own two or three for closing
     // sessions (the default of 4 is one short of five browsers).
     config.httpd.max_open_sockets = 7;
