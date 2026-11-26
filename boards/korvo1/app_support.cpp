@@ -1,5 +1,6 @@
 #include "app_support.hpp"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <utility>
@@ -53,6 +54,11 @@ namespace {
 constexpr int kLogicCore = 0;
 constexpr int kRenderCore = 1;
 
+// The render thread's stack (PRISM's kRenderStackBytes, 48 KB), plus room for its task's control
+// block, which may be allocated from internal RAM before the stack.
+constexpr std::size_t kRenderStackReserve = 52 * 1024;
+void *render_stack_reserve = nullptr;
+
 // The logic thread's 64 KB stack goes to PSRAM: the render thread's 48 KB stack needs one
 // contiguous internal block, which the bands and the tree's small allocations leave too few of.
 void pin_next_thread_to(int core, std::uint32_t stack_caps)
@@ -74,10 +80,18 @@ prism::platform::FrameOptions pinned_threads()
                                                                        : "before render thread");
         if (role == prism::platform::ThreadRole::logic)
             pin_next_thread_to(kLogicCore, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-        else
+        else {
+            // Released right before the stack is allocated, so the stack lands in its hole.
+            heap_caps_free(std::exchange(render_stack_reserve, nullptr));
             pin_next_thread_to(kRenderCore, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+        }
     };
     return options;
+}
+
+void reserve_render_stack()
+{
+    render_stack_reserve = heap_caps_malloc(kRenderStackReserve, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
 }
 
 Touch open_touch_or_none()

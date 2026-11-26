@@ -52,6 +52,7 @@ std::string peer_line(std::size_t peers)
 
 extern "C" void app_main()
 {
+    korvo1::reserve_render_stack();   // before Wi-Fi, which fragments internal RAM
     auto display = korvo1::BandDisplay::open();
     if (!display)
         korvo1::halt(display.error());

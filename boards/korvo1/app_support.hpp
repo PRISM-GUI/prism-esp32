@@ -32,4 +32,9 @@ Touch open_touch_or_none();
 // main/selftest.cpp checks it.
 prism::platform::FrameOptions pinned_threads();
 
+// Holds a block of internal RAM for the render thread's stack, from now until pinned_threads()
+// starts that thread. For an app whose drivers fragment internal RAM before the frame runtime
+// starts (Wi-Fi): called first thing in app_main, the block is there whatever comes after.
+void reserve_render_stack();
+
 } // namespace korvo1
