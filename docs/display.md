@@ -62,7 +62,7 @@ turned.
 
 ## The trace recorder
 
-`widgets`, `scope` and `btspike` record where the time goes. PRISM's global recorder is 768 KiB
+`widgets` and `scope` record where the time goes. PRISM's global recorder is 768 KiB
 of zero-initialised data, more than the internal RAM has left, so `boards/korvo1/linker.lf` puts
 it in PSRAM. That is why those apps set `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y`.
 

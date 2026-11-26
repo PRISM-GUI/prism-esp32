@@ -1,18 +1,18 @@
 #!/bin/bash
-# Build the firmwares: scripts/build.sh [selftest|widgets|scope|tone|btspike|crdt|all] (default: all).
+# Build the firmwares: scripts/build.sh [selftest|widgets|scope|tone|crdt|all] (default: all).
 # Each one is build/<name>.bin, one image merged at address 0 (bootloader, partition table,
 # app): flash it with the web flasher or `esptool.py write_flash 0x0 build/<name>.bin`.
 #
 # crdt also embeds PRISM's browser build, which is a separate emscripten build of PRISM: it needs
 # PRISM_CRDT_WEB_DIR (see crdt_web_bundle below). "all" skips that firmware when the variable is
-# not set, so the other five still build.
+# not set, so the other four still build.
 #
 # With ESP-IDF in the environment (IDF_PATH set: the container, or your own install) it runs
 # idf.py directly; otherwise it runs itself in the build image, with Podman or Docker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-apps=(selftest widgets scope tone btspike crdt)
+apps=(selftest widgets scope tone crdt)
 # The image tag is the first 7 characters of the ESP-IDF commit in docker/Dockerfile, so the tag
 # CI publishes and the one used here cannot drift apart.
 idf_tag=idf-$(sed -n 's/^ARG IDF_COMMIT=\(.\{7\}\).*/\1/p' docker/Dockerfile)
@@ -103,7 +103,7 @@ if [[ " ${selected[*]} " == *" crdt "* ]]; then crdt_web_bundle build/crdt/crdt-
 
 [[ -n ${IDF_PATH:-} ]] || in_container "$@"
 export IDF_TARGET=esp32s31
-# ccache for ESP-IDF's own sources too. The three firmwares build in three directories: paths are
+# ccache for ESP-IDF's own sources too. The firmwares build in one directory each: paths are
 # made relative to the project, and the build directory is left out of the hash, so they share
 # the cache (debug info then names the first directory, which nothing here reads).
 if command -v ccache >/dev/null; then

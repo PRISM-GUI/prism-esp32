@@ -26,25 +26,26 @@ run without PSRAM, and it says so.
 
 It has two USB-C ports. Use the one marked UART. The other one only powers the board.
 
-## The six images
+## The five images
 
 Each image is one file, written at address 0.
 
 | Image | What it does | Shows |
 |---|---|---|
-| `selftest.bin` | Checks PRISM's threads, the SIMD core, the PSRAM, the clocks, the FFT, the profiling. | console only |
+| `selftest.bin` | This board's own checks: PRISM's threads, the SIMD core, the PSRAM, the clocks, the FFT, the profiling. | console only |
 | `widgets.bin` | PRISM's widget demo: a counter, a checkbox and a slider. Touch it. | panel |
-| `scope.bin` | A scope on the board's microphones: the signal on the left, its spectrum on the right. | panel |
-| `tone.bin` | Audio check: lists the devices, decodes a test JPEG, plays 440 Hz at 44.1 then 48 kHz on the speaker, then keeps a tone on the Bluetooth headset. | console only |
-| `btspike.bin` | A throwaway spike: Bluetooth audio next to the widget demo, with the internal heap printed every 5 s. | panel + console |
+| `scope.bin` | PRISM's audio scope on the board's microphones: the signal on the left, its spectrum on the right. | panel |
+| `tone.bin` | PRISM's tone player: lists the devices, plays 440 Hz at 44.1 then 48 kHz on the speaker, then keeps a tone on the Bluetooth headset. | console only |
 | `crdt.bin` | PRISM's crdt_pair mixer, editable on the panel and from browsers on the board's own Wi-Fi. | panel + browser |
 
-`scope` falls back to a synthetic sweep when the microphones do not start, and says so.
+Every one but `selftest` is a PRISM example built unchanged: what the board gives it is the port
+(`boards/korvo1/port.cpp`), never app code. `scope` falls back to a synthetic sweep when the
+microphones do not start, and says so.
 
 Where to get them:
 
 - A GitHub release has `selftest`, `widgets` and `scope`.
-- Every CI run keeps the five it can build as the `firmware` artifact (`crdt` needs PRISM's
+- Every CI run keeps the four it can build as the `firmware` artifact (`crdt` needs PRISM's
   browser build first).
 - Or build them yourself (see "Build it yourself"). `crdt` needs PRISM's browser build first: see
   "Edit together: the crdt firmware".
@@ -122,17 +123,16 @@ What you should see:
 
   It ends with `failures: 0`. A `FAIL` line comes with a hint. The checks are over in about two
   seconds, so the report is printed again every 5 s.
-- `widgets`, `scope` and `btspike`: a timing line once a second (update, snapshot, draw and
+- `widgets`, `scope` and `crdt`: a timing line once a second (update, snapshot, draw and
   present times, and the CPU load).
-- `tone`: the device list, the JPEG check, then two playback lines and the headset state.
-- `btspike` also prints one heap line every 5 s.
+- `tone`: the device list, then two playback lines and the headset state.
 
 If something is wrong, the line says what to do next. For example
 `no PSRAM found: enable CONFIG_SPIRAM, or is this a WROOM-3 module?`.
 
 ## Take a trace
 
-`widgets`, `scope` and `btspike` record where the time goes. The recorder lives in PSRAM.
+`widgets`, `scope` and `crdt` record where the time goes. The recorder lives in PSRAM.
 
 **In the browser (Chrome or Edge, nothing to install):**
 
@@ -171,22 +171,22 @@ Open `trace.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
 ## How it is built
 
 This repository is a PRISM port: the board, not the app. An app is PRISM's own `main()` -- a model,
-a view and `platform::run` -- compiled here unchanged. The board hands PRISM its panel, its touch
-and its thread attributes before `main()` runs, so no app ever names them.
+a view and `platform::run` -- compiled here unchanged. The board hands PRISM its panel, its touch,
+its devices and its thread attributes before `main()` runs, so no app ever names them.
 
 ![The components of the firmware](docs/diagrams/components.svg)
 
-*`main/` holds the board's two-line `app_main` around PRISM's `main()`, plus the board's own tools.
-The port itself is `boards/korvo1/port.cpp`.*
+*`main/` holds the board's two-line `app_main` around PRISM's `main()`. The port itself is
+`boards/korvo1/port.cpp`.*
 
 | Piece | What it is |
 |---|---|
-| `main/` | `app_main.c`: the board's startup, then PRISM's `main()`, then its teardown. A `main/<name>.cpp` exists only for the board's own tools. |
-| `boards/korvo1` | The board as a PRISM port: `port.cpp` registers the panel, the touch and the thread attributes (`prism/platform/port.hpp`); the rest are its PRISM devices: panel, touch, microphones, speaker, JPEG decoder, profile clock, system counters, buttons. |
+| `main/` | `app_main.c`: the board's startup, then PRISM's `main()`, then its teardown. It picks PRISM's example source and nothing else. |
+| `boards/korvo1` | The board as a PRISM port: `port.cpp` registers the panel, the touch, the audio and capture devices and the thread attributes (`prism/platform/port.hpp`); the rest are its PRISM devices: panel, touch, microphones, speaker, JPEG decoder, profile clock, system counters, buttons. |
 | `components/prism` | PRISM, built by its own Meson build with ESP-IDF's compiler and flags, imported as static libraries. |
 | `components/prism_crdt_hub` | The crdt firmware's body for PRISM's `crdt::Hub`: the access point, the HTTPS server, the WebSocket, the embedded page. Registers nothing for the other firmwares. |
 | `components/prism_bt` | The Bluetooth headset as a PRISM audio device. Compiled only when `CONFIG_BT_ENABLED` is on. |
-| `subprojects/prism` | The PRISM submodule: headers and Meson build. |
+| `subprojects/prism` | The PRISM submodule: headers, Meson build, and the examples every firmware here runs. |
 
 ## The display
 
@@ -204,29 +204,32 @@ is what Bluetooth needs. Details and troubleshooting: [docs/display.md](docs/dis
 
 ## Sound
 
-Two audio devices are registered on this board, and PRISM's `Audio::Output` reaches both through
-its backend registry:
+The port registers three audio devices, and PRISM's `Audio::Output` and `Audio::Input` reach them
+through its backend registry:
 
 - `speaker`: the board's codec, a writer thread that owns it, 44.1 or 48 kHz, stereo, hardware
   volume;
-- `headset`: Bluetooth Classic A2DP, 44.1 kHz stereo only, with the headset's own buttons.
+- `headset`: Bluetooth Classic A2DP, 44.1 kHz stereo only, with the headset's own buttons;
+- `mic`: the board's two capsules as one mono capture device at 16 kHz, which PRISM's `Audio::Input`
+  reads (the scope app does).
 
 ![An Output reaches a device through a backend](docs/diagrams/audio-path.svg)
 
 *The registry resolves the device id; the device renders on its own thread.*
 
-    prism::esp32::register_speaker();
-    prism::esp32::bluetooth::start();      // needs CONFIG_BT_ENABLED
+All of them are registered in `korvo1_start()`, so an app names a device and never knows which board
+it runs on. A codec that does not start is simply not registered.
 
-`tone.bin` is the check for both, and its console lines are the expected answers. Contracts,
-Kconfig options, error messages and memory notes: [docs/audio.md](docs/audio.md).
+`tone.bin` is the check for the outputs, and its console lines are the expected answers; `scope.bin`
+is the check for the microphone. Contracts, Kconfig options, error messages and memory notes:
+[docs/audio.md](docs/audio.md).
 
 ## The JPEG decoder
 
 `register_jpeg_decoder()` hands JPEGs to the chip's engine, so covers come from hardware. The
 engine decodes to RGB888, PRISM's scaling step takes it to the size and format asked for
-(`rgb565` for this panel), and a picture larger than 1600x1600 is refused. The tone app decodes a
-64x64 test picture at boot and prints its first pixel: `jpeg: 64x64 rgb565 px0=0xF800`.
+(`rgb565` for this panel), and a picture larger than 1600x1600 is refused. The port registers it at
+boot, as it does the audio devices.
 
 More: [docs/jpeg-decoder.md](docs/jpeg-decoder.md).
 
@@ -289,6 +292,8 @@ See [docs/apps.md](docs/apps.md) for the apps in general.
   garbage, at 115200).
 - `tone` says `speaker: the speaker's codec did not start`: the codec or the board package is not
   the one this repository expects. The error lines the codec driver prints come just before.
+- `scope` shows a moving synthetic sweep instead of the microphones: the microphone codec did not
+  start, and the console line that begins with `microphones:` says why.
 - `tone` keeps printing `headset: Off`: no headset is bonded yet, and nothing was found by name.
   Put the headset in pairing mode the first time. See [docs/audio.md](docs/audio.md).
 - A picture that shifts sideways on the panel: PSRAM cannot keep up. See
@@ -307,8 +312,8 @@ Docker or Podman is all you need.
     scripts/build.sh            # everything it can build
     scripts/build.sh widgets    # just one
 
-The images are `build/selftest.bin`, `build/widgets.bin`, `build/scope.bin`, `build/tone.bin`,
-`build/btspike.bin` and `build/crdt.bin`.
+The images are `build/selftest.bin`, `build/widgets.bin`, `build/scope.bin`, `build/tone.bin` and
+`build/crdt.bin`.
 
 `scripts/build.sh` on its own leaves `crdt` out, with a note: that firmware embeds PRISM's browser
 build, which is a separate build of PRISM with emscripten (see "Edit together: the crdt
@@ -351,9 +356,9 @@ Then register what you play on or decode. The settings to carry over, what you d
 player as a complete example: [docs/integrate.md](docs/integrate.md).
 
 Those three components make the board a port, too: `boards/korvo1/port.cpp` registers the panel,
-the touch and the thread attributes with PRISM (`korvo1_start`, from a two-line `app_main.c`), so
-your app can be a plain `platform::run` `main()` that never names a display -- see
-`main/app_main.c` and `main/CMakeLists.txt`.
+the touch, the speaker, the headset, the microphones and the thread attributes with PRISM
+(`korvo1_start`, from a two-line `app_main.c`), so your app can be a plain `platform::run`
+`main()` that never names a display -- see `main/app_main.c` and `main/CMakeLists.txt`.
 
 ## Add an app to this repository
 
@@ -371,8 +376,10 @@ To run a PRISM example on the panel:
    sets `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y` (see `sdkconfig.widgets`).
 4. Add `<name>` to `apps=(...)` in `scripts/build.sh`.
 
-A board-only tool -- a check, a probe -- skips step 1: write `main/<name>.cpp` with its own
-`app_main()`, opening what it needs from `boards/korvo1`. `main/selftest.cpp` is one.
+A board-only tool -- a check, a probe -- skips step 1: write `boards/korvo1/<name>.cpp` with its own
+`app_main()` and point the last branch of `main/CMakeLists.txt` at it, opening what it needs from
+`boards/korvo1`. `boards/korvo1/selftest.cpp` is one, and the only firmware here that is not
+PRISM's example.
 
 Then `scripts/build.sh <name>` makes `build/<name>.bin`.
 

@@ -1,7 +1,7 @@
 # The app of build/tone.bin (scripts/build.sh adds this file to sdkconfig.defaults).
 CONFIG_PRISM_APP_TONE=y
 # The headset device (components/prism_bt) is part of this firmware too: Bluetooth on, as
-# sdkconfig.btspike has it.
+# ESP-IDF's classic_bt/a2dp_source example has it.
 CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 
 # Bluetooth Classic audio only, as ESP-IDF's classic_bt/a2dp_source example.

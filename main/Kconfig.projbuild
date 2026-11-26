@@ -1,23 +1,21 @@
 menu "PRISM firmware"
 
-    # scripts/build.sh picks it per firmware (sdkconfig.<app>). crdt and widgets run PRISM's own
-    # example main() unchanged (main/CMakeLists.txt); the rest are main/<name>.cpp.
+    # scripts/build.sh picks it per firmware (sdkconfig.<app>). Every app but selftest is one of
+    # PRISM's own examples, run unchanged (main/CMakeLists.txt); selftest is the board's.
     choice PRISM_APP
         prompt "The app this firmware runs"
         default PRISM_APP_SELFTEST
 
         config PRISM_APP_SELFTEST
-            bool "selftest: the on-board checks, on the console"
+            bool "selftest: the board's on-board checks, on the console"
         config PRISM_APP_WIDGETS
-            bool "widgets: the widget demo on the panel"
+            bool "widgets: PRISM's widget demo on the panel"
         config PRISM_APP_SCOPE
-            bool "scope: the microphone scope on the panel"
+            bool "scope: PRISM's audio scope, on the microphones"
         config PRISM_APP_TONE
-            bool "tone: the speaker device, a 440 Hz tone at 44.1 then 48 kHz"
-        config PRISM_APP_BTSPIKE
-            bool "btspike: Bluetooth audio next to the panel (throwaway spike)"
+            bool "tone: PRISM's tone player, on the speaker and the Bluetooth headset"
         config PRISM_APP_CRDT
-            bool "crdt: the mixer, edited from the panel and from browsers on its own Wi-Fi"
+            bool "crdt: PRISM's mixer, edited from the panel and from browsers on its own Wi-Fi"
     endchoice
 
     config PRISM_APP_NAME
@@ -26,7 +24,6 @@ menu "PRISM firmware"
         default "widgets" if PRISM_APP_WIDGETS
         default "scope" if PRISM_APP_SCOPE
         default "tone" if PRISM_APP_TONE
-        default "btspike" if PRISM_APP_BTSPIKE
         default "crdt" if PRISM_APP_CRDT
 
     config PRISM_CRDT_AP_PASSWORD

@@ -1,7 +1,7 @@
 #pragma once
 
-// What this board's startup and its own panel apps (main/scope.cpp) share: stop with a message
-// when there is no screen, print the timing line, and open the touch (or run without input).
+// What this board's startup and its own test share (boards/korvo1/selftest.cpp): stop with a
+// message when there is no screen, print the timing line, and open the touch (or run without input).
 
 #include "touch.hpp"
 
@@ -29,7 +29,7 @@ Touch open_touch_or_none();
 
 // The frame runtime's options for this board: the UI scale (CONFIG_PRISM_UI_SCALE_PERCENT), and
 // logic on core 0, render on core 1. Core 1 is the SIMD core, per Espressif's forum: unconfirmed,
-// main/selftest.cpp checks it.
+// boards/korvo1/selftest.cpp checks it.
 prism::platform::FrameOptions pinned_threads();
 
 // Holds a block of internal RAM for the render thread's stack, from now until pinned_threads()

@@ -1,5 +1,8 @@
 // The on-board self-test: PRISM's threads, a snapshot of the widget demo at the panel's size,
 // and the PSRAM. One line per check, ending in PASS or FAIL, then the number of failures.
+//
+// The port's own test, not an app: it brings its own app_main (main/CMakeLists.txt compiles it
+// for the selftest firmware, where the other firmwares compile PRISM's example instead).
 
 #include <embedded/spectrum.hpp>
 #include <embedded/widgets_app.hpp>

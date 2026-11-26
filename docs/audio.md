@@ -11,19 +11,15 @@ blocks from the Output's render function.*
 
 ## What an app does
 
-    #include "speaker_device.hpp"          // this repository's board component
+The port registers both devices at boot (`boards/korvo1/port.cpp`, `korvo1_start()`), so an app
+only names one:
+
     #include <prism/audio/output.hpp>
 
-    prism::esp32::register_speaker();
     prism::audio::Output out{"speaker", {.sample_rate = 44100, .channels = 2}, render};
 
-For the headset, the component is `prism_bt`:
-
-    prism::esp32::bluetooth::start();
-    prism::audio::Output out{"headset", {.sample_rate = 44100, .channels = 2}, render};
-
-Both calls are idempotent: the second one finds everything up. Call them once at boot, before
-the first Output.
+or `"headset"` for the Bluetooth headset, when the firmware is built with Bluetooth on. The board
+side of each is a component: `speaker_device.cpp` on the board, `prism_bt` for the headset.
 
 `prism::audio::devices()` then lists what is available. On this board, with both registered:
 
@@ -33,8 +29,8 @@ the first Output.
 | `headset` | the connected headset's name, or the configured one | 44100 | s16 | no |
 
 The render function fills one block of interleaved float samples. It runs on the device's
-thread, so it must not allocate, block or take a lock. `main/tone.cpp` keeps its phase in the
-closure, which is the pattern.
+thread, so it must not allocate, block or take a lock. PRISM's `examples/embedded/tone_main.cpp`
+keeps its phase in the closure, which is the pattern.
 
 ## The speaker
 
@@ -63,16 +59,29 @@ Rules the backend enforces:
 - `lost()` is always false: the codec is on the board;
 - the volume is hardware volume, 0 to 1 from the app, 0 to 100 at the codec.
 
-`main/tone.cpp` is the smoke test: it lists the devices, then plays a 440 Hz tone for two
-seconds at 44.1 and again at 48 kHz, and prints how many blocks came and the worst one against
-its budget.
+`tone` is the smoke test: PRISM's `examples/embedded/tone_main.cpp` lists the devices, plays a
+440 Hz tone for two seconds at 44.1 and again at 48 kHz, and prints how many blocks came and the
+worst one against its budget.
+
+## The microphones
+
+`mic_capture.cpp` is the other direction: the same codec's two capsules as PRISM's capture device.
+It lists one device, `mic`/`Microphones`, 16 kHz mono f32, and the port registers it at boot. A
+thread reads blocks of stereo frames from the codec, averages them to mono and pushes them to the
+open `prism::audio::Input` through a gate (the mirror of the speaker's `RenderGate`). The codec
+does not start on some boards; nothing is registered then, and PRISM's scope app falls back to its
+own synthetic sweep.
+
+`pcm.hpp` (`stereo_i16_to_mono`) is the conversion, and `host/test_pcm.cpp` tests it without a
+board.
 
 ## The Bluetooth headset
 
 `components/prism_bt` is the headset as a PRISM device. `bluetooth::start()` brings up the
-controller and Bluedroid, registers the `headset` backend, and starts the link task. The
-component is compiled only when `CONFIG_BT_ENABLED` is on, because the A2DP headers do not exist
-without the stack.
+controller and Bluedroid, registers the `headset` backend, and starts the link task; the port
+calls it in `korvo1_start()` when the firmware is built with Bluetooth on. The component is
+compiled only when `CONFIG_BT_ENABLED` is on, because the A2DP headers do not exist without the
+stack.
 
 The device:
 
@@ -80,7 +89,7 @@ The device:
 - takes its name from the headset once known, `Connected to <name>` being the state text;
 - reports `lost()` as soon as the link is down. That is the contract to rely on: an Output on a
   connection that went away is lost for good, and its owner makes a new one when the headset
-  comes back. `main/tone.cpp` shows the loop;
+  comes back. PRISM's tone example shows the loop;
 - scales the volume in the Output instead of sending AVRCP absolute volume. Absolute volume needs
   the peer to register for it, an exchange that cannot be exercised here; scaling works with
   every headset.
@@ -106,7 +115,7 @@ initialises NVS itself, so a headset is paired once, not once per reset.
 volume keys stay the headset's own.
 
 The handler runs on the Bluetooth task. Post to the app's own thread, never touch a UI from
-there. `main/tone.cpp` only prints.
+there. PRISM's tone example only prints.
 
 Bluedroid's AVRCP target starts with an empty passthrough set and refuses every button as not
 implemented until told which it supports, so the component declares play, pause, stop, forward
@@ -128,11 +137,9 @@ Bluetooth Classic is expensive in internal RAM, and the panel runtime needs a lo
 - The speaker's writer keeps its stack in internal RAM, because the codec driver may touch
   flash.
 - `CONFIG_PRISM_BAND_HEIGHT` trades internal RAM for copies: a smaller band frees some.
-  `main/btspike.cpp` prints the internal heap it works with, in one line every 5 s.
 
 ## Limitations worth knowing
 
 - One Output per device at a time.
 - The speaker plays stereo only; the headset plays 44.1 kHz stereo only.
 - The headset's volume is software, so it costs one multiply per sample.
-- `btspike` is not a supported path: it hardcodes the headset name and its own handshake.

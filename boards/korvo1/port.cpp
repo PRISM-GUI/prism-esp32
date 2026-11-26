@@ -2,7 +2,9 @@
 // the allocation count and guard, fed by the IDF heap hook, and the figures on the timing line,
 // from FreeRTOS's run-time stats and the IDF heap; and, at the bottom, the registration itself
 // (korvo1_start, boards/korvo1/port.hpp), so that an app is PRISM's own main() and never sees a
-// panel, a touch controller or a thread attribute.
+// panel, a touch controller, a codec or a thread attribute.
+
+#include "sdkconfig.h"   // CONFIG_BT_ENABLED: first, before the #if that reads it
 
 #include <prism/platform/alloc_count.hpp>
 #include <prism/platform/frame_app.hpp>
@@ -15,8 +17,15 @@
 
 #include "app_support.hpp"
 #include "band_display.hpp"
+#include "jpeg_decoder.hpp"
+#include "mic_capture.hpp"
 #include "port.hpp"
 #include "profile_dump.hpp"
+#include "speaker_device.hpp"
+
+#if CONFIG_BT_ENABLED
+#include "bluetooth.hpp"
+#endif
 
 #include <cstdint>
 #include <functional>
@@ -133,6 +142,17 @@ extern "C" void korvo1_start(void)
     if (!opened) korvo1::halt(opened.error());
     display = std::move(*opened);
     touch = korvo1::open_touch_or_none();
+
+    // The board's hardware as PRISM's devices, for every app: an app names a device ("speaker",
+    // "headset", "mic") and never knows which board it runs on. All of these are idempotent.
+    prism::esp32::register_speaker();
+    prism::esp32::register_jpeg_decoder();
+#if CONFIG_BT_ENABLED
+    prism::esp32::bluetooth::start();   // the bonded headset, or a scan for the configured name
+#endif
+    // A codec that does not start is not registered: PRISM's scope then shows its synthetic
+    // sweep, and the line printed here says why.
+    (void)korvo1::register_mic_capture();
 
     prism::platform::set_port({
         .run_frames = run_board_frames,

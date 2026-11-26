@@ -49,13 +49,12 @@ Each failure comes back as the decoder's error string, which `decode_image()` re
 | `the JPEG engine could not decode it` | the engine failed on the data |
 | `cannot scale the image` | the scaling step failed |
 
-## The check in the tone app
+## Registering it
 
-`main/tone.cpp` carries a 64x64 baseline JPEG (left half red, right half blue) and decodes it at
-boot:
+`korvo1_start()` calls `register_jpeg_decoder()` (boards/korvo1/port.cpp), so every firmware on
+this board has the hardware decoder. Nothing in this repository's firmwares decodes a picture
+today; a `prism::render::decode_image()` call gets the engine unchanged.
 
-    jpeg: 64x64 rgb565 px0=0xF800
-
-`0xF800` is red in RGB565, so that one line says the hardware decoder answered, converted to the
-panel's format. Any other value, or a line starting with `jpeg:`, is a failure. See
-[apps.md](apps.md).
+The test picture that used to live in the tone app (a 64x64 baseline JPEG, left half red, right
+half blue, `px0=0xF800` in RGB565) went with that app; a check again would be a new board tool.
+See [apps.md](apps.md).
