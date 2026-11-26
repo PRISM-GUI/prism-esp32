@@ -25,3 +25,13 @@ CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
 # The profile recorder's 768 KiB of .bss goes to PSRAM (boards/korvo1/linker.lf). The panel needs
 # PSRAM anyway: without it this firmware aborts at boot ("Failed to init external RAM").
 CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+
+# The render thread's 48 KB stack needs one block of internal RAM, and Wi-Fi took it: on the first
+# boot the largest internal block left was 31 KB. Wi-Fi and lwIP buffers may go to PSRAM, and the
+# driver's speed-ups stay out of internal RAM (on this chip IRAM is the heap's memory); a few small
+# CRDT messages do not need either.
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# CONFIG_ESP_WIFI_IRAM_OPT is not set
+# CONFIG_ESP_WIFI_EXTRA_IRAM_OPT is not set
+# CONFIG_ESP_WIFI_RX_IRAM_OPT is not set
+# CONFIG_ESP_WIFI_SLP_IRAM_OPT is not set
