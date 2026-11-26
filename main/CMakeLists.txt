@@ -23,7 +23,8 @@ if(CONFIG_PRISM_APP_CRDT)
     set(crdt_web_files
         "${crdt_web_dir}/crdt_pair.html.gz"
         "${crdt_web_dir}/crdt_pair.js.gz"
-        "${crdt_web_dir}/crdt_pair.wasm.gz")
+        "${crdt_web_dir}/crdt_pair.wasm.gz"
+        "${crdt_web_dir}/crdt_pair.data.gz")
     foreach(file IN LISTS crdt_web_files)
         if(NOT EXISTS "${file}")
             message(FATAL_ERROR "the crdt firmware serves the browser build of PRISM's crdt_pair "

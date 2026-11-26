@@ -67,6 +67,8 @@ extern const std::uint8_t script_gz_start[] asm("_binary_crdt_pair_js_gz_start")
 extern const std::uint8_t script_gz_end[] asm("_binary_crdt_pair_js_gz_end");
 extern const std::uint8_t module_gz_start[] asm("_binary_crdt_pair_wasm_gz_start");
 extern const std::uint8_t module_gz_end[] asm("_binary_crdt_pair_wasm_gz_end");
+extern const std::uint8_t data_gz_start[] asm("_binary_crdt_pair_data_gz_start");
+extern const std::uint8_t data_gz_end[] asm("_binary_crdt_pair_data_gz_end");
 }
 
 struct Asset {
@@ -77,11 +79,14 @@ struct Asset {
 };
 
 // The names the wasm build gives its files (PRISM's examples/meson.build emits crdt_pair.html,
-// which loads crdt_pair.js, which loads crdt_pair.wasm). "/" is the page.
+// which loads crdt_pair.js, which loads crdt_pair.wasm and crdt_pair.data, the packaged files: the
+// fonts). "/" is the page. Its coi-serviceworker.js stays a 404: it fakes the isolation headers on
+// hosts that cannot send them, and this server sends them.
 const Asset assets[] = {
     {"/", "text/html", page_gz_start, page_gz_end},
     {"/crdt_pair.js", "text/javascript", script_gz_start, script_gz_end},
     {"/crdt_pair.wasm", "application/wasm", module_gz_start, module_gz_end},
+    {"/crdt_pair.data", "application/octet-stream", data_gz_start, data_gz_end},
 };
 
 using PeerId = prism::crdt::Room::PeerId;
@@ -364,6 +369,7 @@ const httpd_uri_t routes[] = {
     get_route("/", serve_asset),
     get_route("/crdt_pair.js", serve_asset),
     get_route("/crdt_pair.wasm", serve_asset),
+    get_route("/crdt_pair.data", serve_asset),
     room_route(),
 };
 

@@ -56,7 +56,7 @@ EOF
         exit 1
     fi
     mkdir -p "$dir"
-    for file in crdt_pair.html crdt_pair.js crdt_pair.wasm; do
+    for file in crdt_pair.html crdt_pair.js crdt_pair.wasm crdt_pair.data; do
         if [[ ! -f $PRISM_CRDT_WEB_DIR/$file ]]; then
             echo "PRISM_CRDT_WEB_DIR=$PRISM_CRDT_WEB_DIR has no $file:" \
                  "point it at PRISM's builddir-wasm/examples/crdt_pair." >&2
