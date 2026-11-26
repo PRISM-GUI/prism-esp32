@@ -241,6 +241,10 @@ join and edit the same model while the panel shows every change.
 The certificate is self-signed and made at build time, so the browser warns once: accept it, and
 that is the only warning it gives for this address.
 
+Security is demo grade on purpose. The Wi-Fi password has a known default, and the certificate's
+private key is inside the image, so do not share a `crdt.bin` you use. A real app sets its own
+`CONFIG_PRISM_CRDT_AP_PASSWORD` and brings its own certificate.
+
 What to look for:
 
 - Move the gain slider or the mode on the panel: the page follows. Change them in the page: the
