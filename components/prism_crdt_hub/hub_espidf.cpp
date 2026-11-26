@@ -55,7 +55,7 @@ constexpr const char *ap_ssid = "PRISM";
 static_assert(sizeof(CONFIG_PRISM_CRDT_AP_PASSWORD) >= 9,
               "CONFIG_PRISM_CRDT_AP_PASSWORD is too short for WPA2: at least 8 characters");
 
-// A browser's frame is a handful of bytes (a Yrs update or a sync message). The cap only refuses
+// A browser's frame is a handful of bytes (a Yjs update or a sync message). The cap only refuses
 // something that would not fit the room's idea of a message anyway.
 constexpr std::size_t max_frame_bytes = 64 * 1024;
 
@@ -368,7 +368,7 @@ esp_err_t Hub::Impl::on_open(httpd_req_t *req)
     return ESP_OK;
 }
 
-// Every binary frame is a Yrs message on its way to the logic thread. Control frames never arrive
+// Every binary frame is a Yjs message on its way to the logic thread. Control frames never arrive
 // (handle_ws_control_frames is false); a text frame is not part of the protocol.
 //
 // simplify: a fragmented message arrives as one CONTINUE frame per fragment, which this drops --

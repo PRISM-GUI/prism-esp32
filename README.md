@@ -280,7 +280,8 @@ Then build this repository's firmware, pointing it at those three files:
     PRISM_CRDT_WEB_DIR=builddir-wasm/examples/crdt_pair scripts/build.sh crdt
 
 That also builds PRISM with its crdt layer (`-DPRISM_CRDT=ON`): the Doc, the sync protocol and
-Yrs, the Rust CRDT library, cross-built for this chip by the esp-rs toolchain in the build image.
+ycpp, its Yjs-compatible CRDT engine in plain C++, which is a static library like the rest of
+PRISM's build, so the crdt firmware needs nothing beyond ESP-IDF.
 See [docs/apps.md](docs/apps.md) for the apps in general.
 
 ## Troubleshooting

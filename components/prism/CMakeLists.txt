@@ -18,20 +18,13 @@ set(PRISM_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../subprojects/prism")
 set(PRISM_MESON_DIR "${CMAKE_BINARY_DIR}/prism-meson")
 set(PRISM_CROSS_FILE "${CMAKE_BINARY_DIR}/prism-meson-cross.ini")
 option(PRISM_PROFILING "PRISM's profile marks and global recorder (-Dprofiling=enabled)" OFF)
-option(PRISM_CRDT "PRISM's crdt layer (-Dcrdt=enabled) and Yrs built for this target" OFF)
+option(PRISM_CRDT "PRISM's crdt layer (-Dcrdt=enabled)" OFF)
 
-# At this level, not inside a function: the cross file's [properties] and Meson's options both
-# come from here. Empty strings mean "no crdt", which is how PRISM's yffi subproject reads them (it
-# only builds Yrs, the Rust static library, when a Rust target is named) -- a Rust target for the
-# board is riscv32imafc-esp-espidf, built by the esp-rs toolchain rustup installed as "esp".
+# At this level, not inside a function: Meson's options come from here.
 if(PRISM_CRDT)
-    set(PRISM_RUST_TARGET "riscv32imafc-esp-espidf")
-    set(PRISM_RUST_TOOLCHAIN "esp")
     set(PRISM_MESON_CRDT "-Dcrdt=enabled")
 else()
-    set(PRISM_RUST_TARGET "")
-    set(PRISM_RUST_TOOLCHAIN "")
-    set(PRISM_MESON_CRDT "")
+    set(PRISM_MESON_CRDT "-Dcrdt=disabled")   # crdt is auto (on) in PRISM: skip building it
 endif()
 
 find_program(MESON_EXECUTABLE meson REQUIRED)
@@ -184,28 +177,6 @@ function(prism_static_libraries json out_names)
     set(${out_names} "${names}" PARENT_SCOPE)
 endfunction()
 
-# The output file of a `custom` target -- a target Meson runs a command for rather than a library
-# it knows how to link. Yrs is one: yffi's Meson wrap builds libyrs.a with cargo, so the static
-# library list above never sees it and it has to be linked by path (see the bottom of this file).
-function(prism_custom_output json target_name out)
-    string(JSON count LENGTH "${json}")
-    math(EXPR last "${count} - 1")
-    foreach(i RANGE ${last})
-        string(JSON name GET "${json}" ${i} name)
-        if(name STREQUAL target_name)
-            string(JSON type GET "${json}" ${i} type)
-            if(NOT type STREQUAL "custom")
-                message(FATAL_ERROR "PRISM's Meson target ${target_name} is a ${type}, not a custom target")
-            endif()
-            string(JSON file GET "${json}" ${i} filename 0)
-            set(${out} "${file}" PARENT_SCOPE)
-            return()
-        endif()
-    endforeach()
-    message(FATAL_ERROR "PRISM's Meson build has no target ${target_name}: PRISM_CRDT needs a "
-                        "subprojects/prism whose yffi wrap builds Yrs (doc/integrations/crdt.md)")
-endfunction()
-
 function(prism_target_parameters json target_name out)
     string(JSON count LENGTH "${json}")
     math(EXPR last "${count} - 1")
@@ -270,18 +241,19 @@ foreach(lib IN LISTS _libs)
     list(APPEND _byproducts "${PRISM_LIB_${lib}}")
 endforeach()
 
-# Yrs, when the crdt layer is on: cargo's output behind a custom target, so it is not among the
-# imported libraries above. Named here so it is a by-product of the external project (the link that
-# needs it must wait for Meson's build) and linked by path at the bottom of this file.
-set(_prism_yrs_lib "")
+# The crdt layer, when it is on: its libraries are static libraries like the rest, so they are
+# imported above, but Meson's introspection order puts a subproject's library before the one that
+# needs it (libycpp.a before libprism-crdt.a). Repeating the two in a group at the end of the link
+# line lets the resolver see either order.
+set(_prism_crdt_libs "")
 if(PRISM_CRDT)
-    if(NOT "prism-crdt" IN_LIST _libs)
+    if(NOT "prism-crdt" IN_LIST _libs OR NOT "ycpp" IN_LIST _libs)
         message(FATAL_ERROR "PRISM was configured with PRISM_CRDT but its Meson build has no "
-                            "prism-crdt library: subprojects/prism is too old for the crdt layer, or "
-                            "-Dcrdt=enabled was refused (read ${PRISM_MESON_DIR}/meson-logs/meson-log.txt)")
+                            "prism-crdt and ycpp libraries: subprojects/prism is too old for the crdt "
+                            "layer, or -Dcrdt=enabled was refused "
+                            "(read ${PRISM_MESON_DIR}/meson-logs/meson-log.txt)")
     endif()
-    prism_custom_output("${_targets}" yrs _prism_yrs_lib)
-    list(APPEND _byproducts "${_prism_yrs_lib}")
+    set(_prism_crdt_libs "${PRISM_LIB_prism-crdt}" "${PRISM_LIB_ycpp}")
 endif()
 
 ExternalProject_Add(prism_meson
@@ -294,8 +266,8 @@ ExternalProject_Add(prism_meson
     USES_TERMINAL_BUILD TRUE
     BUILD_BYPRODUCTS ${_byproducts})
 
-# PRISM's own four libraries by name; every other one (CMSIS-DSP, libunibreak, SheenBidi...) is
-# a subproject's, linked after them.
+# PRISM's own four libraries by name; every other one (CMSIS-DSP, libunibreak, SheenBidi..., and
+# the crdt layer's prism-crdt and ycpp) is linked after them.
 set(_own prism prism-raster prism-platform prism_embedded_apps)
 add_library(prism_third_party INTERFACE)
 foreach(lib IN LISTS _libs)
@@ -321,11 +293,9 @@ target_link_libraries(prism::embedded_apps INTERFACE prism::core)
 
 target_link_libraries(${COMPONENT_LIB} INTERFACE prism::platform prism::embedded_apps)
 
-# Yrs is in none of the imported libraries above, so nothing would link it: it is named by the path
-# introspection gave, in a group so its own order does not matter. The crdt layer's libprism-crdt.a
-# is already in prism_third_party and comes earlier on the link line, which is what makes its Yrs
-# symbols resolve from here.
-if(_prism_yrs_lib)
+# The crdt libraries are in the imported libraries above, but the group at the end of the link line
+# repeats them so their own order does not matter.
+if(_prism_crdt_libs)
     target_link_libraries(${COMPONENT_LIB} INTERFACE
-        "-Wl,--start-group" "${_prism_yrs_lib}" "-Wl,--end-group")
+        "-Wl,--start-group" ${_prism_crdt_libs} "-Wl,--end-group")
 endif()

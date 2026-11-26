@@ -49,7 +49,7 @@ set_source_files_properties("${cert_pem}" "${key_pem}" PROPERTIES GENERATED TRUE
 add_custom_target(prism_crdt_hub_certificate DEPENDS "${cert_pem}" "${key_pem}")
 
 idf_component_register(
-    SRCS hub_espidf.cpp realpath_stub.c
+    SRCS hub_espidf.cpp
     EMBED_FILES ${crdt_web_files}
     EMBED_TXTFILES "${cert_pem}" "${key_pem}"
     REQUIRES ${hub_requires}
@@ -58,6 +58,3 @@ idf_component_register(
 # The certificate is a custom command's output: the component has to be told, or the embed step and
 # the link can be scheduled before the files exist.
 add_dependencies(${COMPONENT_LIB} prism_crdt_hub_certificate)
-# libprism_crdt_hub comes before libyrs on the link line, so the realpath stub would be skipped
-# before Rust's std asks for it: mark it needed from the start.
-target_link_libraries(${COMPONENT_LIB} INTERFACE "-Wl,-u,realpath")

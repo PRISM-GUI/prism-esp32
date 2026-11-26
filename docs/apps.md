@@ -89,8 +89,8 @@ matters: it goes up and down with the pages in the room). A refused handshake lo
 `crdt` is the only app that needs more than the submodule: it embeds PRISM's `crdt_pair` page,
 built for the browser with emscripten, gzipped. `scripts/build.sh crdt` needs `PRISM_CRDT_WEB_DIR`
 to point at that build's output, and says how to make it if it is missing (README, "Edit together:
-the crdt firmware"). The same flag turns PRISM's crdt layer on, so Yrs is cross-built for the chip
-as part of the build.
+the crdt firmware"). The same flag turns PRISM's crdt layer on; its engine, ycpp, is plain C++ built
+by PRISM's own Meson build, so the crdt firmware needs nothing beyond ESP-IDF.
 
 The hub's OS side is `components/prism_crdt_hub`: the access point, the HTTPS server, the
 WebSocket at `/room`, the embedded page and the certificate. The app opens a `crdt::Hub` and

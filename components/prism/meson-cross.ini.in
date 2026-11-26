@@ -16,11 +16,6 @@ cpp_link_args = [@PRISM_LINK_ARGS@]
 
 [properties]
 needs_exe_wrapper = true
-# What PRISM's yffi subproject cross-builds Yrs for. Both are empty unless the crdt layer is on
-# (components/prism's PRISM_CRDT), and empty means Yrs is not built at all: the esp-rs toolchain
-# names its target and its rustup toolchain, and no other target builds the Rust library here.
-rust_target = '@PRISM_RUST_TARGET@'
-rust_toolchain = '@PRISM_RUST_TOOLCHAIN@'
 
 [host_machine]
 system = 'none'
