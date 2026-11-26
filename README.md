@@ -170,18 +170,21 @@ Open `trace.json` in [ui.perfetto.dev](https://ui.perfetto.dev).
 
 ## How it is built
 
-One app source, three components, on top of ESP-IDF.
+This repository is a PRISM port: the board, not the app. An app is PRISM's own `main()` -- a model,
+a view and `platform::run` -- compiled here unchanged. The board hands PRISM its panel, its touch
+and its thread attributes before `main()` runs, so no app ever names them.
 
 ![The components of the firmware](docs/diagrams/components.svg)
 
-*`main/` holds one `.cpp` per app. The board port, PRISM and the headset component are the three
-pieces it builds on.*
+*`main/` holds the board's two-line `app_main` around PRISM's `main()`, plus the board's own tools.
+The port itself is `boards/korvo1/port.cpp`.*
 
 | Piece | What it is |
 |---|---|
-| `main/` | One `.cpp` per app, chosen by Kconfig. |
-| `boards/korvo1` | The board as PRISM devices: panel, touch, microphones, speaker, JPEG decoder, profile clock, system counters, buttons. |
+| `main/` | `app_main.c`: the board's startup, then PRISM's `main()`, then its teardown. A `main/<name>.cpp` exists only for the board's own tools. |
+| `boards/korvo1` | The board as a PRISM port: `port.cpp` registers the panel, the touch and the thread attributes (`prism/platform/port.hpp`); the rest are its PRISM devices: panel, touch, microphones, speaker, JPEG decoder, profile clock, system counters, buttons. |
 | `components/prism` | PRISM, built by its own Meson build with ESP-IDF's compiler and flags, imported as static libraries. |
+| `components/prism_crdt_hub` | The crdt firmware's body for PRISM's `crdt::Hub`: the access point, the HTTPS server, the WebSocket, the embedded page. Registers nothing for the other firmwares. |
 | `components/prism_bt` | The Bluetooth headset as a PRISM audio device. Compiled only when `CONFIG_BT_ENABLED` is on. |
 | `subprojects/prism` | The PRISM submodule: headers and Meson build. |
 
@@ -233,6 +236,11 @@ More: [docs/jpeg-decoder.md](docs/jpeg-decoder.md).
 board is the hub: it opens its own Wi-Fi network and serves the page, so a phone and a laptop can
 join and edit the same model while the panel shows every change.
 
+The firmware is PRISM's `examples/crdt_hub/main.cpp`, compiled here unchanged: the app opens a
+`crdt::Hub` and registers the drain, and this board supplies the hub's OS side -- the access point,
+the HTTPS server, the WebSocket at `/room` -- in `components/prism_crdt_hub`. `widgets.bin` is
+`examples/embedded/widgets_main.cpp` the same way.
+
 1. Flash `crdt.bin`.
 2. On the phone or the laptop, join the Wi-Fi network `PRISM` (password `prism-crdt`, or whatever
    `CONFIG_PRISM_CRDT_AP_PASSWORD` was set to).
@@ -258,7 +266,7 @@ network. Nothing is saved: a reboot starts from the model's defaults.
 ### Build it first
 
 The page is PRISM's `crdt_pair` example built for the browser with emscripten, and the firmware
-embeds its three files gzipped. Build that first, in PRISM's checkout:
+embeds those files gzipped. Build that first, in PRISM's checkout:
 
     meson setup builddir-wasm --cross-file cross/wasm32-emscripten.ini \
         --buildtype=release -Dtests=disabled -Dbenchmarks=disabled -Dcrdt=enabled
@@ -342,18 +350,29 @@ Add this repository as a submodule and add three component directories to your p
 Then register what you play on or decode. The settings to carry over, what you do not get, and the
 player as a complete example: [docs/integrate.md](docs/integrate.md).
 
+Those three components make the board a port, too: `boards/korvo1/port.cpp` registers the panel,
+the touch and the thread attributes with PRISM (`korvo1_start`, from a two-line `app_main.c`), so
+your app can be a plain `platform::run` `main()` that never names a display -- see
+`main/app_main.c` and `main/CMakeLists.txt`.
+
 ## Add an app to this repository
 
-An app is a model and a view, as on the desktop. This repository only holds the board.
+An app is PRISM's: a model, a view and a `main()`, as on the desktop. This repository holds the
+board, and picking a firmware's app in Kconfig.
 
-1. Write `main/<name>.cpp` with an `app_main()`. Copy `main/widgets.cpp`: it opens the display
-   and the touch, then runs PRISM's `frame_app` on your model. Use `boards/korvo1/app_support.hpp`
-   for `halt`, `print_stats` and `open_touch_or_none`.
-2. Add a line for it in `main/Kconfig.projbuild` (a `config PRISM_APP_<NAME>` and a
-   `default "<name>"` for `PRISM_APP_NAME`).
+To run a PRISM example on the panel:
+
+1. Write it in PRISM's tree, as `examples/<name>/main.cpp`: a `main()` that calls `platform::run`
+   on its model. Nothing in it names the panel, the touch or a thread -- the board's port does.
+2. Add it to the choice in `main/CMakeLists.txt` (an `elseif(CONFIG_PRISM_APP_<NAME>)` setting
+   `prism_example_source`), and a `config PRISM_APP_<NAME>` with a `default "<name>"` for
+   `PRISM_APP_NAME` in `main/Kconfig.projbuild`.
 3. Add `sdkconfig.<name>` with `CONFIG_PRISM_APP_<NAME>=y`. An app that records a profile also
    sets `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y` (see `sdkconfig.widgets`).
 4. Add `<name>` to `apps=(...)` in `scripts/build.sh`.
+
+A board-only tool -- a check, a probe -- skips step 1: write `main/<name>.cpp` with its own
+`app_main()`, opening what it needs from `boards/korvo1`. `main/selftest.cpp` is one.
 
 Then `scripts/build.sh <name>` makes `build/<name>.bin`.
 

@@ -1,15 +1,27 @@
-// The port hooks of the ESP32-S31-Korvo-1 (prism/platform/alloc_count.hpp, frame_stats.hpp):
-// the allocation count and guard, fed by the IDF heap hook, and the figures on
-// the timing line, from FreeRTOS's run-time stats and the IDF heap.
+// This board as a PRISM port: the port hooks (prism/platform/alloc_count.hpp, frame_stats.hpp),
+// the allocation count and guard, fed by the IDF heap hook, and the figures on the timing line,
+// from FreeRTOS's run-time stats and the IDF heap; and, at the bottom, the registration itself
+// (korvo1_start, boards/korvo1/port.hpp), so that an app is PRISM's own main() and never sees a
+// panel, a touch controller or a thread attribute.
 
 #include <prism/platform/alloc_count.hpp>
+#include <prism/platform/frame_app.hpp>
 #include <prism/platform/frame_stats.hpp>
+#include <prism/platform/port.hpp>
 
 #include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "app_support.hpp"
+#include "band_display.hpp"
+#include "port.hpp"
+#include "profile_dump.hpp"
+
 #include <cstdint>
+#include <functional>
+#include <optional>
+#include <utility>
 
 namespace {
 
@@ -84,4 +96,51 @@ std::optional<prism::platform::SystemCounters> prism::platform::system_counters(
         .stacks_used = internal.used,
         .stacks_total = internal.total,
     };
+}
+
+namespace {
+
+// For the whole run: the render thread draws into the panel until main() is back, and the port's
+// run closes over both. BandDisplay has a private constructor (it is only ever opened), so the
+// panel lives in the optional; the touch needs none.
+std::optional<korvo1::BandDisplay> display;
+korvo1::Touch touch;
+
+// What platform::run calls: PRISM's frame runtime over this board's panel, touch and thread
+// attributes, plus the one hook an app does not have -- the profile dump when the app plays.
+void run_board_frames(prism::platform::TreeFactory make_tree,
+                      std::function<void(prism::platform::FrameContext &)> setup)
+{
+    prism::platform::run_frames(
+        *display, touch, std::move(make_tree),
+        [setup = std::move(setup)](prism::platform::FrameContext &fc) {
+            // The AppContext and the app's setup, then our hook: both must be registered before
+            // setup returns.
+            setup(fc);
+            fc.on_loop(korvo1::dump_profile_on_play());
+        },
+        korvo1::pinned_threads());
+}
+
+} // namespace
+
+extern "C" void korvo1_start(void)
+{
+    // Before Wi-Fi or anything else claims memory: the stack has to be one contiguous block.
+    korvo1::reserve_render_stack();
+
+    auto opened = korvo1::BandDisplay::open();
+    if (!opened) korvo1::halt(opened.error());
+    display = std::move(*opened);
+    touch = korvo1::open_touch_or_none();
+
+    prism::platform::set_port({
+        .run_frames = run_board_frames,
+        .on_stats = korvo1::print_stats,
+    });
+}
+
+extern "C" void korvo1_stopped(void)
+{
+    korvo1::halt_runtime_stopped();
 }

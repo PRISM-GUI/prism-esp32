@@ -1,11 +1,14 @@
-// The board's access point, its HTTPS server, and the WebSocket relay into a crdt::Room. Three
-// layers that never cross: this file starts the Wi-Fi, the server's tasks own the sockets and
-// queue what they read, and the logic thread (drain(), from crdt.cpp's on_loop) is the only one
-// that ever touches the room -- and through it, the Doc.
-
-#include "crdt_net.hpp"
+// PRISM's crdt::Hub for this board: the Wi-Fi access point, an HTTPS server with the page and the
+// WebSocket at /room, and a crdt::Room fed from the logic thread. The header is PRISM's
+// (include/prism/crdt/hub.hpp) and an app sees only that; PRISM builds no hub on bare metal
+// (prism-net is off there: no sockets), so the transport lives here.
+//
+// Three layers that never cross: the server's tasks own the sockets and queue what they read, the
+// channel wakes the logic thread (set_waker), and drain() -- the logic thread -- is the only one
+// that ever touches the room, and through it, the Doc.
 
 #include <prism/core/channel.hpp>
+#include <prism/crdt/hub.hpp>
 #include <prism/crdt/room.hpp>
 
 #include <esp_event.h>
@@ -29,12 +32,15 @@
 
 #include <unistd.h>  // close()
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -53,9 +59,10 @@ static_assert(sizeof(CONFIG_PRISM_CRDT_AP_PASSWORD) >= 9,
 // something that would not fit the room's idea of a message anyway.
 constexpr std::size_t max_frame_bytes = 64 * 1024;
 
-// The bundle, gzipped by scripts/build.sh into ${CMAKE_BINARY_DIR}/crdt-web and embedded by
-// main/CMakeLists.txt (EMBED_FILES, so these are the bytes verbatim). The certificate and its key
-// come from the build too (EMBED_TXTFILES, which appends the NUL mbedTLS's PEM parser needs).
+// The bundle, gzipped by scripts/build.sh into ${CMAKE_BINARY_DIR}/crdt-web and embedded by this
+// component's CMakeLists.txt (EMBED_FILES, so these are the bytes verbatim). The certificate and
+// its key come from the build too (EMBED_TXTFILES, which appends the NUL mbedTLS's PEM parser
+// needs).
 extern "C" {
 extern const std::uint8_t cert_pem_start[] asm("_binary_cert_pem_start");
 extern const std::uint8_t cert_pem_end[] asm("_binary_cert_pem_end");
@@ -148,6 +155,14 @@ std::string wifi_softap_start()
     return {};
 }
 
+// The access point belongs to the chip, not to a Hub: the first Hub starts it, and a failure is
+// remembered so a later attempt reports the same reason instead of re-running a half-done init.
+const std::string &access_point()
+{
+    static const std::string error = wifi_softap_start();
+    return error;
+}
+
 std::string header(httpd_req_t *req, const char *name)
 {
     const std::size_t length = httpd_req_get_hdr_value_len(req, name);
@@ -177,13 +192,52 @@ std::string_view without_default_port(std::string_view host)
     return host;
 }
 
+// httpd_uri_t's fields depend on the Kconfig options, so each route starts zeroed.
+httpd_uri_t get_route(const char *uri, esp_err_t (*handler)(httpd_req_t *))
+{
+    httpd_uri_t route{};
+    route.uri = uri;
+    route.method = HTTP_GET;
+    route.handler = handler;
+    return route;
+}
+
 }  // namespace
 
-struct board_crdt::Server::Impl {
-    explicit Impl(prism::crdt::Doc &doc) : room(doc)
+namespace prism::crdt {
+
+// What the handshake asks (check_origin below): no Origin is not a browser; a listed one is
+// allowed on purpose; otherwise the page must come from this server's own host.
+//
+// simplify: the desktop's hub also refuses a Host that is not an IP literal or localhost, which
+// stops DNS rebinding (src/crdt/hub.cpp). Here there is no name to resolve -- the access point is
+// 192.168.4.1 and the board is never a client of the internet -- so an Origin equal to the Host is
+// the whole rule.
+bool origin_allowed(std::string_view origin, std::string_view host,
+                    std::span<const std::string> allowed)
+{
+    if (origin.empty())
+        return true;
+    if (std::find(allowed.begin(), allowed.end(), origin) != allowed.end())
+        return true;
+    return without_default_port(url_host(origin)) == without_default_port(host);
+}
+
+struct Hub::Impl {
+    Impl(Doc &document, Options hub_options)
+        : options(std::move(hub_options)), room(document)
     {
         events.observe([this](const Event &event) { apply(event); });
     }
+
+    ~Impl()
+    {
+        if (httpd != nullptr)
+            httpd_ssl_stop(httpd);
+    }
+
+    // Defined below: it registers the routes, which are built after this struct.
+    void start();
 
     // The logic thread only.
     void apply(const Event &event)
@@ -244,19 +298,30 @@ struct board_crdt::Server::Impl {
         std::free(arg);
     }
 
-    prism::crdt::Room room;
-    prism::core::Channel<Event> events;
+    // The server's callbacks. Members, not free functions: Hub keeps its Impl to itself, and the
+    // server only hands out C function pointers.
+    static Impl *of(httpd_req_t *req);
+    static esp_err_t serve_asset(httpd_req_t *req);
+    static esp_err_t check_origin(httpd_req_t *req);
+    static esp_err_t on_open(httpd_req_t *req);
+    static esp_err_t on_frame(httpd_req_t *req);
+    static void on_session_close(httpd_handle_t handle, int socket);
+    static httpd_uri_t room_route();
+
+    static const std::array<httpd_uri_t, 5> routes;
+
+    Options options;
+    Room room;
+    core::Channel<Event> events;
     httpd_handle_t httpd = nullptr;
 };
 
-namespace {
-
-board_crdt::Server::Impl *impl_of(httpd_req_t *req)
+Hub::Impl *Hub::Impl::of(httpd_req_t *req)
 {
-    return static_cast<board_crdt::Server::Impl *>(httpd_get_global_user_ctx(req->handle));
+    return static_cast<Impl *>(httpd_get_global_user_ctx(req->handle));
 }
 
-esp_err_t serve_asset(httpd_req_t *req)
+esp_err_t Hub::Impl::serve_asset(httpd_req_t *req)
 {
     for (const Asset &asset : assets) {
         if (std::strcmp(req->uri, asset.uri) != 0)
@@ -274,23 +339,17 @@ esp_err_t serve_asset(httpd_req_t *req)
     return httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "no such file");
 }
 
-// The handshake: the page comes from this server, so its Origin is this server's own host. A
-// client that sends no Origin (not a browser) has nothing to compare and is let in -- the access
-// point has no name to resolve, so there is no other origin a browser page could come from.
-//
 // Called by the server before it answers the handshake, not as the URI handler: since IDF 5.0 a
 // WebSocket handshake never reaches the handler (components/esp_http_server/src/httpd_uri.c), so
-// this callback is where a join is accepted or refused.
+// this callback is where a join is accepted or refused. origin_allowed decides; this only reports.
 //
 // CHECK: returning ESP_FAIL closes the socket; whether the 403 written just before it reaches the
 // browser or the connection just drops, the page's WebSocket fails either way.
-esp_err_t check_origin(httpd_req_t *req)
+esp_err_t Hub::Impl::check_origin(httpd_req_t *req)
 {
     const std::string origin = header(req, "Origin");
-    if (origin.empty())
-        return ESP_OK;
     const std::string host = header(req, "Host");
-    if (without_default_port(url_host(origin)) == without_default_port(host))
+    if (origin_allowed(origin, host, of(req)->options.allowed_origins))
         return ESP_OK;
     ESP_LOGW(tag, "refused a websocket from origin \"%s\" (host \"%s\")", origin.c_str(),
              host.c_str());
@@ -299,11 +358,13 @@ esp_err_t check_origin(httpd_req_t *req)
 }
 
 // The handshake was answered: the browser is in. Its peer id is its socket.
-esp_err_t on_open(httpd_req_t *req)
+esp_err_t Hub::Impl::on_open(httpd_req_t *req)
 {
     const auto peer = static_cast<PeerId>(httpd_req_to_sockfd(req));
     ESP_LOGI(tag, "socket %d joined", static_cast<int>(peer));
-    impl_of(req)->events.send(Event{EventKind::join, peer, {}});
+    // Queued for the logic thread, which the channel wakes through the waker the app set
+    // (Hub::set_waker): once per drained batch, from this task.
+    of(req)->events.send(Event{EventKind::join, peer, {}});
     return ESP_OK;
 }
 
@@ -312,7 +373,7 @@ esp_err_t on_open(httpd_req_t *req)
 //
 // simplify: a fragmented message arrives as one CONTINUE frame per fragment, which this drops --
 // emscripten's WebSocket sends a page's message whole, and the room's messages are small.
-esp_err_t on_frame(httpd_req_t *req)
+esp_err_t Hub::Impl::on_frame(httpd_req_t *req)
 {
     httpd_ws_frame_t frame = {};
     esp_err_t error = httpd_ws_recv_frame(req, &frame, 0);
@@ -329,43 +390,33 @@ esp_err_t on_frame(httpd_req_t *req)
     if ((error = httpd_ws_recv_frame(req, &frame, frame.len)) != ESP_OK)
         return error;
     const auto peer = static_cast<PeerId>(httpd_req_to_sockfd(req));
-    impl_of(req)->events.send(Event{EventKind::message, peer, std::move(bytes)});
+    of(req)->events.send(Event{EventKind::message, peer, std::move(bytes)});
     return ESP_OK;
 }
 
 // Replaces the server's own close(): it must close the socket itself. The room forgets the peer
 // on the logic thread, so a message queued before this close still lands before the leave.
-void on_session_close(httpd_handle_t handle, int socket)
+void Hub::Impl::on_session_close(httpd_handle_t handle, int socket)
 {
     close(socket);
-    auto *impl = static_cast<board_crdt::Server::Impl *>(httpd_get_global_user_ctx(handle));
+    auto *impl = static_cast<Impl *>(httpd_get_global_user_ctx(handle));
     if (impl == nullptr)
         return;
     ESP_LOGI(tag, "socket %d left", socket);
     impl->events.send(Event{EventKind::leave, static_cast<PeerId>(socket), {}});
 }
 
-// httpd_uri_t's fields depend on the Kconfig options, so each route starts zeroed.
-httpd_uri_t get_route(const char *uri, esp_err_t (*handler)(httpd_req_t *))
+httpd_uri_t Hub::Impl::room_route()
 {
-    httpd_uri_t route{};
-    route.uri = uri;
-    route.method = HTTP_GET;
-    route.handler = handler;
-    return route;
+    httpd_uri_t room = get_route("/room", on_frame);
+    room.is_websocket = true;
+    room.handle_ws_control_frames = false;
+    room.ws_pre_handshake_cb = check_origin;
+    room.ws_post_handshake_cb = on_open;
+    return room;
 }
 
-httpd_uri_t room_route()
-{
-    httpd_uri_t route = get_route("/room", on_frame);
-    route.is_websocket = true;
-    route.handle_ws_control_frames = false;
-    route.ws_pre_handshake_cb = check_origin;
-    route.ws_post_handshake_cb = on_open;
-    return route;
-}
-
-const httpd_uri_t routes[] = {
+const std::array<httpd_uri_t, 5> Hub::Impl::routes = {
     get_route("/", serve_asset),
     get_route("/crdt_pair.js", serve_asset),
     get_route("/crdt_pair.wasm", serve_asset),
@@ -373,23 +424,18 @@ const httpd_uri_t routes[] = {
     room_route(),
 };
 
-}  // namespace
-
-namespace board_crdt {
-
-Server::Server(prism::crdt::Doc &doc) : impl_(std::make_unique<Impl>(doc)) {}
-
-Server::~Server()
+// A Hub that cannot come up throws (hub.hpp): there is no hub to hand the app, and the board has
+// nowhere to go without one.
+void Hub::Impl::start()
 {
-    if (impl_->httpd != nullptr)
-        httpd_ssl_stop(impl_->httpd);
-}
+    if (const std::string &wifi = access_point(); !wifi.empty()) {
+        ESP_LOGE(tag, "%s", wifi.c_str());
+        throw std::runtime_error{wifi};
+    }
 
-std::string Server::start()
-{
-    if (std::string wifi = wifi_softap_start(); !wifi.empty())
-        return wifi;
-
+    // Options::host, Options::port and Options::static_dir are the desktop hub's (src/crdt/hub.cpp:
+    // a loopback server handing out files from a directory). The board listens where the access
+    // point is, on 443, and serves the page it embeds; port() says 443 for the same reason.
     httpd_ssl_config_t config = HTTPD_SSL_CONFIG_DEFAULT();
     config.servercert = cert_pem_start;
     // mbedTLS parses PEM only when the length counts the NUL that EMBED_TXTFILES appends.
@@ -399,32 +445,48 @@ std::string Server::start()
     // The five browsers the access point takes, plus the server's own two or three for closing
     // sessions (the default of 4 is one short of five browsers).
     config.httpd.max_open_sockets = 7;
-    config.httpd.max_uri_handlers = sizeof routes / sizeof routes[0];
+    config.httpd.max_uri_handlers = static_cast<std::uint16_t>(routes.size());
     config.httpd.lru_purge_enable = true;
     config.httpd.close_fn = on_session_close;
-    config.httpd.global_user_ctx = impl_.get();
-    // Without it, stopping the server would free() the context: it belongs to this Server.
+    config.httpd.global_user_ctx = this;
+    // Without it, stopping the server would free() the context: it belongs to this Impl.
     config.httpd.global_user_ctx_free_fn = [](void *) {};
 
-    if (esp_err_t error = httpd_ssl_start(&impl_->httpd, &config); error != ESP_OK)
-        return error_message("httpd_ssl_start", error);
+    if (esp_err_t error = httpd_ssl_start(&httpd, &config); error != ESP_OK)
+        throw std::runtime_error{error_message("httpd_ssl_start", error)};
 
     for (const httpd_uri_t &route : routes) {
-        if (esp_err_t error = httpd_register_uri_handler(impl_->httpd, &route); error != ESP_OK) {
-            httpd_ssl_stop(impl_->httpd);
-            impl_->httpd = nullptr;
-            return error_message("httpd_register_uri_handler", error);
+        if (esp_err_t error = httpd_register_uri_handler(httpd, &route); error != ESP_OK) {
+            httpd_ssl_stop(httpd);
+            httpd = nullptr;
+            throw std::runtime_error{error_message("httpd_register_uri_handler", error)};
         }
     }
 
     ESP_LOGI(tag, "serving https://192.168.4.1");
-    return {};
 }
 
-std::size_t Server::drain()
+Hub::Hub(Doc &doc, Options hub_options)
+    : impl_(std::make_unique<Impl>(doc, std::move(hub_options)))
+{
+    impl_->start();
+}
+
+Hub::~Hub() = default;
+
+std::uint16_t Hub::port() const
+{
+    return 443;
+}
+
+void Hub::drain()
 {
     impl_->events.drain_notifications();
-    return impl_->room.size();
 }
 
-}  // namespace board_crdt
+void Hub::set_waker(std::function<void()> fn)
+{
+    impl_->events.set_waker(std::move(fn));
+}
+
+}  // namespace prism::crdt

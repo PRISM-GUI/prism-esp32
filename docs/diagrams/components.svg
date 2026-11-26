@@ -18,13 +18,13 @@
     </style>
   </defs>
 
-  <text class="title" x="24" y="30">The firmware is one app source over three components</text>
-  <text class="sub" x="24" y="52">main/ holds one .cpp per app. The components come from this repository, ESP-IDF and the board package.</text>
+  <text class="title" x="24" y="30">The firmware is an app, this board's port and PRISM</text>
+  <text class="sub" x="24" y="52">main/ holds app_main.c, PRISM's example main() for the converted apps, and the board's own tools.</text>
 
   <!-- row 1: main -->
   <rect class="box" x="24" y="72" width="330" height="92" rx="6"/>
   <text class="name" x="38" y="98">main/</text>
-  <text class="sub" x="38" y="118">selftest.cpp  widgets.cpp  scope.cpp</text>
+  <text class="sub" x="38" y="118">app_main.c  selftest.cpp  scope.cpp</text>
   <text class="sub" x="38" y="136">tone.cpp  btspike.cpp</text>
   <text class="sub" x="38" y="156">Kconfig picks one: CONFIG_PRISM_APP_NAME</text>
 

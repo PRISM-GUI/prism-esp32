@@ -1,8 +1,14 @@
 # The apps
 
-Each app is one `main/<name>.cpp` with an `app_main()`. Kconfig picks exactly one
-(`main/Kconfig.projbuild`), and `sdkconfig.<name>` says which, so `scripts/build.sh <name>`
-produces one merged image, `build/<name>.bin`.
+A firmware runs either a PRISM example, unchanged, or one of this board's own tools. Kconfig picks
+exactly one (`main/Kconfig.projbuild`), and `sdkconfig.<name>` says which, so
+`scripts/build.sh <name>` produces one merged image, `build/<name>.bin`.
+
+The board is the port. `boards/korvo1/port.cpp` opens the panel and the touch and registers them
+with PRISM before `main()` (`korvo1_start`), and `main/app_main.c` is the whole `app_main`: start
+the board, call PRISM's `main()`, and if it ever returns, say why. So `crdt` and `widgets` are
+PRISM's `examples/crdt_hub/main.cpp` and `examples/embedded/widgets_main.cpp`, compiled from the
+submodule with no change, and `main/` holds no code of theirs.
 
 | App | What it does | Needs |
 |---|---|---|
@@ -107,12 +113,23 @@ at that build's output, and says how to make it if it is missing (README, "Edit 
 firmware"). The same flag turns PRISM's crdt layer on, so Yrs is cross-built for the chip as part
 of the build.
 
+The hub's OS side is `components/prism_crdt_hub`: the access point, the HTTPS server, the
+WebSocket at `/room`, the embedded page and the certificate. The app opens a `crdt::Hub` and
+drains it; it never names a socket. PRISM builds no hub on bare metal (no sockets there), so this
+component is where `prism/crdt/hub.hpp` gets its body for this chip. Outside the `crdt` firmware it
+registers an empty library.
+
 ## Where the shared code lives
 
-The panel apps share `boards/korvo1/app_support.hpp`: `halt` for a missing screen,
-`print_stats` for the timing line, `open_touch_or_none` for input, and `pinned_threads()` for
-the runtime options (logic on core 0, render on core 1, the UI scale).
+The port is three files: `boards/korvo1/port.cpp` (the registration, plus the allocation count and
+the system counters PRISM's timing line reads), `boards/korvo1/port.hpp` (the two C functions
+`app_main.c` calls) and `main/app_main.c`. What the board and its own tools share is
+`boards/korvo1/app_support.hpp`: `halt` for a missing screen, `print_stats` for the timing line,
+`open_touch_or_none` for input, and `pinned_threads()` for the runtime options (logic on core 0,
+render on core 1, the UI scale).
 
-Adding an app in this repository: copy `main/widgets.cpp`, add a `config PRISM_APP_<NAME>` and a
-`default "<name>"` for `PRISM_APP_NAME` in `main/Kconfig.projbuild`, add `sdkconfig.<name>`, and
-add the name to `apps=(...)` in `scripts/build.sh`.
+Adding an app in this repository means adding one to PRISM: write `examples/<name>/main.cpp` -- a
+`main()` calling `platform::run` -- add an `elseif(CONFIG_PRISM_APP_<NAME>)` to
+`main/CMakeLists.txt` and a `config PRISM_APP_<NAME>` to `main/Kconfig.projbuild`, add
+`sdkconfig.<name>`, and add the name to `apps=(...)` in `scripts/build.sh`. A board-only tool
+writes its own `main/<name>.cpp` with an `app_main()` instead.

@@ -3,9 +3,9 @@ CONFIG_PRISM_APP_CRDT=y
 # The "PRISM" access point's WPA2 password: 8 to 63 characters.
 CONFIG_PRISM_CRDT_AP_PASSWORD="prism-crdt"
 
-# The server (main/crdt_net.cpp): HTTPS with the certificate made at build time, and a WebSocket
-# at /room. A WebSocket handshake never reaches a URI handler, so the origin check and the "peer
-# joined" event need the callbacks around it.
+# The server (components/prism_crdt_hub: PRISM's crdt::Hub, ESP-IDF body): HTTPS with the
+# certificate made at build time, and a WebSocket at /room. A WebSocket handshake never reaches a
+# URI handler, so the origin check and the "peer joined" event need the callbacks around it.
 CONFIG_ESP_HTTPS_SERVER_ENABLE=y
 CONFIG_HTTPD_WS_SUPPORT=y
 CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT=y

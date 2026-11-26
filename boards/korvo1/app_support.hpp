@@ -1,7 +1,7 @@
 #pragma once
 
-// What the panel apps (main/widgets.cpp, main/scope.cpp) share: stop with a message when there
-// is no screen, print the timing line, and open the touch (or run without input).
+// What this board's startup and its own panel apps (main/scope.cpp) share: stop with a message
+// when there is no screen, print the timing line, and open the touch (or run without input).
 
 #include "touch.hpp"
 

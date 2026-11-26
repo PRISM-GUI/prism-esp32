@@ -1,6 +1,7 @@
 menu "PRISM firmware"
 
-    # scripts/build.sh picks it per firmware (sdkconfig.<app>); main/<name>.cpp is the app.
+    # scripts/build.sh picks it per firmware (sdkconfig.<app>). crdt and widgets run PRISM's own
+    # example main() unchanged (main/CMakeLists.txt); the rest are main/<name>.cpp.
     choice PRISM_APP
         prompt "The app this firmware runs"
         default PRISM_APP_SELFTEST
