@@ -18,6 +18,21 @@ set(PRISM_SOURCE_DIR "${CMAKE_CURRENT_LIST_DIR}/../../subprojects/prism")
 set(PRISM_MESON_DIR "${CMAKE_BINARY_DIR}/prism-meson")
 set(PRISM_CROSS_FILE "${CMAKE_BINARY_DIR}/prism-meson-cross.ini")
 option(PRISM_PROFILING "PRISM's profile marks and global recorder (-Dprofiling=enabled)" OFF)
+option(PRISM_CRDT "PRISM's crdt layer (-Dcrdt=enabled) and Yrs built for this target" OFF)
+
+# At this level, not inside a function: the cross file's [properties] and Meson's options both
+# come from here. Empty strings mean "no crdt", which is how PRISM's yffi subproject reads them (it
+# only builds Yrs, the Rust static library, when a Rust target is named) -- a Rust target for the
+# board is riscv32imafc-esp-espidf, built by the esp-rs toolchain rustup installed as "esp".
+if(PRISM_CRDT)
+    set(PRISM_RUST_TARGET "riscv32imafc-esp-espidf")
+    set(PRISM_RUST_TOOLCHAIN "esp")
+    set(PRISM_MESON_CRDT "-Dcrdt=enabled")
+else()
+    set(PRISM_RUST_TARGET "")
+    set(PRISM_RUST_TOOLCHAIN "")
+    set(PRISM_MESON_CRDT "")
+endif()
 
 find_program(MESON_EXECUTABLE meson REQUIRED)
 find_program(NINJA_EXECUTABLE ninja REQUIRED)
@@ -122,7 +137,7 @@ function(prism_meson_setup)
         --cross-file "${PRISM_CROSS_FILE}"
         --buildtype=plain -Dwerror=false
         -Dsdl=disabled -Dio=disabled -Dtests=disabled -Dfreertos_port=disabled
-        -Dprism_debug_tools=disabled ${profiling})
+        -Dprism_debug_tools=disabled ${PRISM_MESON_CRDT} ${profiling})
     if(EXISTS "${PRISM_MESON_DIR}/meson-private/coredata.dat")
         if(cross_hash STREQUAL PRISM_MESON_CROSS_HASH)
             list(PREPEND setup_args --reconfigure)
@@ -167,6 +182,28 @@ function(prism_static_libraries json out_names)
         endif()
     endforeach()
     set(${out_names} "${names}" PARENT_SCOPE)
+endfunction()
+
+# The output file of a `custom` target -- a target Meson runs a command for rather than a library
+# it knows how to link. Yrs is one: yffi's Meson wrap builds libyrs.a with cargo, so the static
+# library list above never sees it and it has to be linked by path (see the bottom of this file).
+function(prism_custom_output json target_name out)
+    string(JSON count LENGTH "${json}")
+    math(EXPR last "${count} - 1")
+    foreach(i RANGE ${last})
+        string(JSON name GET "${json}" ${i} name)
+        if(name STREQUAL target_name)
+            string(JSON type GET "${json}" ${i} type)
+            if(NOT type STREQUAL "custom")
+                message(FATAL_ERROR "PRISM's Meson target ${target_name} is a ${type}, not a custom target")
+            endif()
+            string(JSON file GET "${json}" ${i} filename 0)
+            set(${out} "${file}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+    message(FATAL_ERROR "PRISM's Meson build has no target ${target_name}: PRISM_CRDT needs a "
+                        "subprojects/prism whose yffi wrap builds Yrs (doc/integrations/crdt.md)")
 endfunction()
 
 function(prism_target_parameters json target_name out)
@@ -233,6 +270,20 @@ foreach(lib IN LISTS _libs)
     list(APPEND _byproducts "${PRISM_LIB_${lib}}")
 endforeach()
 
+# Yrs, when the crdt layer is on: cargo's output behind a custom target, so it is not among the
+# imported libraries above. Named here so it is a by-product of the external project (the link that
+# needs it must wait for Meson's build) and linked by path at the bottom of this file.
+set(_prism_yrs_lib "")
+if(PRISM_CRDT)
+    if(NOT "prism-crdt" IN_LIST _libs)
+        message(FATAL_ERROR "PRISM was configured with PRISM_CRDT but its Meson build has no "
+                            "prism-crdt library: subprojects/prism is too old for the crdt layer, or "
+                            "-Dcrdt=enabled was refused (read ${PRISM_MESON_DIR}/meson-logs/meson-log.txt)")
+    endif()
+    prism_custom_output("${_targets}" yrs _prism_yrs_lib)
+    list(APPEND _byproducts "${_prism_yrs_lib}")
+endif()
+
 ExternalProject_Add(prism_meson
     SOURCE_DIR "${PRISM_SOURCE_DIR}"
     BINARY_DIR "${PRISM_MESON_DIR}"
@@ -269,3 +320,12 @@ prism_import(prism::embedded_apps "${PRISM_LIB_prism_embedded_apps}")
 target_link_libraries(prism::embedded_apps INTERFACE prism::core)
 
 target_link_libraries(${COMPONENT_LIB} INTERFACE prism::platform prism::embedded_apps)
+
+# Yrs is in none of the imported libraries above, so nothing would link it: it is named by the path
+# introspection gave, in a group so its own order does not matter. The crdt layer's libprism-crdt.a
+# is already in prism_third_party and comes earlier on the link line, which is what makes its Yrs
+# symbols resolve from here.
+if(_prism_yrs_lib)
+    target_link_libraries(${COMPONENT_LIB} INTERFACE
+        "-Wl,--start-group" "${_prism_yrs_lib}" "-Wl,--end-group")
+endif()

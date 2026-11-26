@@ -15,6 +15,8 @@ menu "PRISM firmware"
             bool "tone: the speaker device, a 440 Hz tone at 44.1 then 48 kHz"
         config PRISM_APP_BTSPIKE
             bool "btspike: Bluetooth audio next to the panel (throwaway spike)"
+        config PRISM_APP_CRDT
+            bool "crdt: the mixer, edited from the panel and from browsers on its own Wi-Fi"
     endchoice
 
     config PRISM_APP_NAME
@@ -24,5 +26,14 @@ menu "PRISM firmware"
         default "scope" if PRISM_APP_SCOPE
         default "tone" if PRISM_APP_TONE
         default "btspike" if PRISM_APP_BTSPIKE
+        default "crdt" if PRISM_APP_CRDT
+
+    config PRISM_CRDT_AP_PASSWORD
+        string "The crdt access point's WPA2 password"
+        default "prism-crdt"
+        depends on PRISM_APP_CRDT
+        help
+            The password of the "PRISM" access point the crdt firmware opens: 8 to 63
+            characters, and the browser has to be given it to join.
 
 endmenu

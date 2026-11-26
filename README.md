@@ -26,7 +26,7 @@ run without PSRAM, and it says so.
 
 It has two USB-C ports. Use the one marked UART. The other one only powers the board.
 
-## The five images
+## The six images
 
 Each image is one file, written at address 0.
 
@@ -37,14 +37,17 @@ Each image is one file, written at address 0.
 | `scope.bin` | A scope on the board's microphones: the signal on the left, its spectrum on the right. | panel |
 | `tone.bin` | Audio check: lists the devices, decodes a test JPEG, plays 440 Hz at 44.1 then 48 kHz on the speaker, then keeps a tone on the Bluetooth headset. | console only |
 | `btspike.bin` | A throwaway spike: Bluetooth audio next to the widget demo, with the internal heap printed every 5 s. | panel + console |
+| `crdt.bin` | PRISM's crdt_pair mixer, editable on the panel and from browsers on the board's own Wi-Fi. | panel + browser |
 
 `scope` falls back to a synthetic sweep when the microphones do not start, and says so.
 
 Where to get them:
 
 - A GitHub release has `selftest`, `widgets` and `scope`.
-- Every CI run keeps all five as the `firmware` artifact.
-- Or build them yourself (see "Build it yourself").
+- Every CI run keeps the five it can build as the `firmware` artifact (`crdt` needs PRISM's
+  browser build first).
+- Or build them yourself (see "Build it yourself"). `crdt` needs PRISM's browser build first: see
+  "Edit together: the crdt firmware".
 
 Details per app, and the exact console output: [docs/apps.md](docs/apps.md).
 
@@ -224,6 +227,47 @@ engine decodes to RGB888, PRISM's scaling step takes it to the size and format a
 
 More: [docs/jpeg-decoder.md](docs/jpeg-decoder.md).
 
+## Edit together: the crdt firmware
+
+`crdt.bin` runs PRISM's `crdt_pair` mixer on the panel, and the same mixer in a browser. The
+board is the hub: it opens its own Wi-Fi network and serves the page, so a phone and a laptop can
+join and edit the same model while the panel shows every change.
+
+1. Flash `crdt.bin`.
+2. On the phone or the laptop, join the Wi-Fi network `PRISM` (password `prism-crdt`, or whatever
+   `CONFIG_PRISM_CRDT_AP_PASSWORD` was set to).
+3. Open `https://192.168.4.1`.
+
+The certificate is self-signed and made at build time, so the browser warns once: accept it, and
+that is the only warning it gives for this address.
+
+What to look for:
+
+- Move the gain slider or the mode on the panel: the page follows. Change them in the page: the
+  panel follows.
+- The line under the widgets says how many browsers have joined (up to five).
+- Reload the page: it rejoins and catches up, and the panel's count does not grow.
+
+There is no internet: the access point is the board's own, and the board does not join another
+network. Nothing is saved: a reboot starts from the model's defaults.
+
+### Build it first
+
+The page is PRISM's `crdt_pair` example built for the browser with emscripten, and the firmware
+embeds its three files gzipped. Build that first, in PRISM's checkout:
+
+    meson setup builddir-wasm --cross-file cross/wasm32-emscripten.ini \
+        --buildtype=release -Dtests=disabled -Dbenchmarks=disabled -Dcrdt=enabled
+    ninja -C builddir-wasm examples/crdt_pair/crdt_pair
+
+Then build this repository's firmware, pointing it at those three files:
+
+    PRISM_CRDT_WEB_DIR=builddir-wasm/examples/crdt_pair scripts/build.sh crdt
+
+That also builds PRISM with its crdt layer (`-DPRISM_CRDT=ON`): the Doc, the sync protocol and
+Yrs, the Rust CRDT library, cross-built for this chip by the esp-rs toolchain in the build image.
+See [docs/apps.md](docs/apps.md) for the apps in general.
+
 ## Troubleshooting
 
 - The board boots, then aborts with `Failed to init external RAM`: this board has no PSRAM.
@@ -237,6 +281,10 @@ More: [docs/jpeg-decoder.md](docs/jpeg-decoder.md).
   Put the headset in pairing mode the first time. See [docs/audio.md](docs/audio.md).
 - A picture that shifts sideways on the panel: PSRAM cannot keep up. See
   [docs/display.md](docs/display.md).
+- `crdt`: the page does not load, or it loads and never joins. It has to be `https://192.168.4.1`
+  (plain `http` cannot work: the wasm build needs a secure context), with the certificate warning
+  accepted. If the page loads and the panel still says no browser joined, the Wi-Fi network was
+  joined but the page is open on another address (a bookmark from another network).
 
 ## Build it yourself
 
@@ -244,11 +292,15 @@ Docker or Podman is all you need.
 
     git clone --recursive https://github.com/PRISM-GUI/prism-esp32
     cd prism-esp32
-    scripts/build.sh            # all five
+    scripts/build.sh            # everything it can build
     scripts/build.sh widgets    # just one
 
-The images are `build/selftest.bin`, `build/widgets.bin`, `build/scope.bin`, `build/tone.bin` and
-`build/btspike.bin`.
+The images are `build/selftest.bin`, `build/widgets.bin`, `build/scope.bin`, `build/tone.bin`,
+`build/btspike.bin` and `build/crdt.bin`.
+
+`scripts/build.sh` on its own leaves `crdt` out, with a note: that firmware embeds PRISM's browser
+build, which is a separate build of PRISM with emscripten (see "Edit together: the crdt
+firmware"). Everything else needs no extra input.
 
 The script runs in the build image, `ghcr.io/prism-gui/prism-esp32-dev`, tagged `idf-<sha7>`, the
 first 7 characters of the pinned ESP-IDF commit in `docker/Dockerfile` (and `latest`). It has

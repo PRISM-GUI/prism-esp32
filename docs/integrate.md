@@ -1,6 +1,6 @@
 # Use this repository from another app
 
-This repository is not only five demos. It is the Korvo-1 board support for any PRISM app on
+This repository is not only six demos. It is the Korvo-1 board support for any PRISM app on
 that board: the display, the touch, the microphones, the speaker, the Bluetooth headset, the
 profile clock and the JPEG decoder.
 
@@ -86,7 +86,7 @@ player uses: internal RAM is the scarce one, and the bands are the lever. See
 ## What you do not get
 
 - The app choice. `main/Kconfig.projbuild` and the `sdkconfig.<app>` files belong to this
-  repository's five demos; your app has its own `main/`.
+  repository's six demos; your app has its own `main/`.
 - The build script. `scripts/build.sh` builds the demos in this repository's `main/`. Use your
   own `idf.py` invocation, merge the image with `esptool merge-bin`, or copy the script's last
   step.

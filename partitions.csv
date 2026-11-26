@@ -1,6 +1,7 @@
-# The scope firmware outgrew the 1.5 MB of the large single-app preset: 3 MB for the app (the
-# board has 16 MB of flash).
+# The scope firmware outgrew the 1.5 MB of the large single-app preset, and the crdt firmware
+# needs more again: the UI, Wi-Fi, TLS and its 1.3 MB embedded browser bundle. 6 MB for the app
+# (the board has 16 MB of flash).
 # Name,   Type, SubType, Offset,  Size
 nvs,      data, nvs,     0x9000,  0x6000
 phy_init, data, phy,     0xf000,  0x1000
-factory,  app,  factory, 0x10000, 0x300000
+factory,  app,  factory, 0x10000, 0x600000

@@ -2,8 +2,9 @@
 CONFIG_IDF_TARGET="esp32s31"
 CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
 CONFIG_SPIRAM=y
-# A 3 MB app partition (partitions.csv): the self-test alone fills 82% of the default 1 MB, and
-# the scope is over the 1.5 MB of the large preset.
+# A 6 MB app partition (partitions.csv): the self-test alone fills 82% of the default 1 MB, the
+# scope is over the 1.5 MB of the large preset, and the crdt firmware carries a 1.3 MB browser
+# bundle.
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 

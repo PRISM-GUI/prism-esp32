@@ -1,0 +1,27 @@
+# The app of build/crdt.bin (scripts/build.sh adds this file to sdkconfig.defaults).
+CONFIG_PRISM_APP_CRDT=y
+# The "PRISM" access point's WPA2 password: 8 to 63 characters.
+CONFIG_PRISM_CRDT_AP_PASSWORD="prism-crdt"
+
+# The server (main/crdt_net.cpp): HTTPS with the certificate made at build time, and a WebSocket
+# at /room. A WebSocket handshake never reaches a URI handler, so the origin check and the "peer
+# joined" event need the callbacks around it.
+CONFIG_ESP_HTTPS_SERVER_ENABLE=y
+CONFIG_HTTPD_WS_SUPPORT=y
+CONFIG_HTTPD_WS_PRE_HANDSHAKE_CB_SUPPORT=y
+CONFIG_HTTPD_WS_POST_HANDSHAKE_CB_SUPPORT=y
+# A browser's request headers (cookies, sec-websocket-*, the wasm fetch's) do not fit anything
+# smaller. This is also what the server allocates per request, so it is not raised further.
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+
+# Seven sockets for the server (five browsers plus its own slack for closing sessions) need the
+# three lwIP keeps for itself: the default of 10 is exactly at the limit.
+CONFIG_LWIP_MAX_SOCKETS=12
+
+# Each TLS session's buffers go to PSRAM: five of them would not fit the internal RAM the panel
+# and PRISM's tree already share.
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+
+# The profile recorder's 768 KiB of .bss goes to PSRAM (boards/korvo1/linker.lf). The panel needs
+# PSRAM anyway: without it this firmware aborts at boot ("Failed to init external RAM").
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y

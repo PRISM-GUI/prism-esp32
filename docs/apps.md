@@ -11,14 +11,17 @@ produces one merged image, `build/<name>.bin`.
 | `scope` | The board's microphones as a waveform and a spectrum. | PSRAM, panel |
 | `tone` | Lists the audio devices, decodes a test JPEG, plays a 440 Hz tone on the speaker at 44.1 then 48 kHz, then keeps one on the Bluetooth headset. | PSRAM, speaker, a headset for the last part |
 | `btspike` | Throwaway spike: A2DP plus AVRCP next to the widget demo, heap printed every 5 s. | PSRAM, panel, a headset |
+| `crdt` | PRISM's crdt_pair mixer on the panel, and the same model in a browser on the board's own Wi-Fi. | PSRAM, panel, PRISM's browser build |
 
 `widgets` and `scope` show the timing line on the panel and on the console. `tone` prints to the
 console only. `btspike` shows the widget demo and prints one heap line every 5 s on the console.
+`crdt` shows the mixer and, under it, the address a browser opens (`https://192.168.4.1`) and how
+many browsers have joined.
 
 ## Build and flash
 
     scripts/build.sh tone
-    scripts/build.sh              # all five
+    scripts/build.sh              # everything, except crdt without PRISM's browser build
     scripts/flash.sh build/tone.bin
 
 Docker or Podman is enough. With `IDF_PATH` set, the script runs `idf.py` directly, and then you
@@ -86,6 +89,23 @@ Kconfig option), streams a 440 Hz tone, runs the widget demo, and prints one lin
 the stream may have starved. The line exists to answer one question: how much internal RAM
 Bluetooth Classic leaves next to the panel. The `prism_bt` component is the supported answer; see
 [audio.md](audio.md).
+
+### crdt
+
+    crdt: access point "PRISM" up at 192.168.4.1
+    crdt: serving https://192.168.4.1
+    crdt: socket 53 joined
+    crdt: socket 53 left
+
+One `joined` line per browser page, one `left` per close or reload (the panel's count is what
+matters: it goes up and down with the pages in the room). A refused handshake logs
+`crdt: refused a websocket from origin ...`.
+
+`crdt` is the only app that is not self-contained: it embeds PRISM's `crdt_pair` page, built for
+the browser with emscripten, gzipped. `scripts/build.sh crdt` needs `PRISM_CRDT_WEB_DIR` to point
+at that build's output, and says how to make it if it is missing (README, "Edit together: the crdt
+firmware"). The same flag turns PRISM's crdt layer on, so Yrs is cross-built for the chip as part
+of the build.
 
 ## Where the shared code lives
 
